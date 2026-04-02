@@ -198,22 +198,109 @@ npm run lint-all
 
 ## Testing
 
-### 1. Run Tests
+Shopstr uses Jest + Testing Library with a strong emphasis on deterministic tests for UI behavior, Nostr services, and parser logic.
+
+### 1. Running Tests
 
 ```bash
 # Run all tests
 npm test
 
-# Run tests in watch mode during development
+# Run watch mode during development
 npm run test:watch
+
+# Run CI-equivalent command with coverage + machine-readable reports
+npm test -- --ci --coverage --coverageReporters=json-summary --coverageReporters=text --json --outputFile=test-results.json
+
+# Run a single test file
+npm test -- components/utility-components/profile/__tests__/profile-avatar.test.tsx
+
+# Run tests matching a name pattern
+npm test -- -t "displays verified NIP-05"
 ```
 
-### 2. Writing Tests
+### 2. Testing Philosophy
 
-- Write tests for new features and bug fixes
-- Place test files next to the components they test or in a `__tests__` directory
-- Use descriptive test names
-- Follow existing test patterns
+- Keep tests behavior-focused: verify user-visible behavior and contract-level outputs.
+- Prefer fast and deterministic tests: mock network, relay, storage, and clock dependencies.
+- Use focused fixtures per test instead of broad global setup where possible.
+- Add regression tests for bug fixes before or alongside implementation changes.
+
+### 3. AAA Pattern (Arrange, Act, Assert)
+
+Use AAA structure for consistency and readability:
+
+- Arrange: setup mocks, fixtures, providers, and initial state.
+- Act: render component or invoke function under test.
+- Assert: verify output, side effects, and interactions.
+
+Example pattern:
+
+```tsx
+it("marks profile as verified when nip05 verification succeeds", async () => {
+   // Arrange
+   mockVerifyNip05Identifier.mockResolvedValue(true);
+   const profileEvent = buildProfileEvent({ nip05: "alice@example.com" });
+
+   // Act
+   const result = await fetchProfile(mockNostr, relays, [profileEvent.pubkey], () => {});
+
+   // Assert
+   expect(result.profileMap.get(profileEvent.pubkey)?.nip05Verified).toBe(true);
+});
+```
+
+### 4. Mocking Guidance
+
+The codebase is mock-heavy by design, especially for Nostr and browser APIs.
+
+- Mock Nostr interactions (`NostrManager`, signer, relay fetch/publish methods).
+- Mock browser storage (`localStorage`, `sessionStorage`) for helper and auth flows.
+- Mock router/navigation for Next.js UI components that call `router.push`.
+- Mock time-dependent logic when asserting timestamps or expiration behavior.
+
+Suggested test scaffold:
+
+```ts
+describe("your feature", () => {
+   beforeEach(() => {
+      jest.clearAllMocks();
+   });
+
+   it("does the expected thing", async () => {
+      // Arrange
+      // Act
+      // Assert
+   });
+});
+```
+
+### 5. Writing a New Test (Checklist)
+
+1. Place test files near source (`__tests__` directories are preferred in this repo).
+2. Name tests by behavior, not implementation details.
+3. Cover both happy path and at least one failure/edge path.
+4. Verify side effects for Nostr publish/fetch and storage writes where relevant.
+5. Run targeted tests first, then full `npm test` before opening a PR.
+
+### 6. Troubleshooting
+
+```bash
+# Re-run only changed tests
+npm test -- --onlyChanged
+
+# Verbose output for debugging
+npm test -- --verbose
+
+# Clear Jest cache if stale failures appear
+npx jest --clearCache
+```
+
+Common issues:
+
+- `Not implemented: navigation` in jsdom: mock or stub navigation methods in tests.
+- Flaky async assertions: use `await waitFor(...)` and avoid arbitrary sleeps.
+- Cross-test pollution: reset mocks and storage in `beforeEach`.
 
 ## Creating a Pull Request
 

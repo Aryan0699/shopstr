@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext } from "react";
-import { nip19 } from "nostr-tools";
+
 import { deleteEvent } from "@/utils/nostr/nostr-helper-functions";
 import { NostrEvent } from "../utils/types/types";
 import {
@@ -22,6 +22,7 @@ import {
   SignerContext,
 } from "@/components/utility-components/nostr-context-provider";
 import { getListingSlug } from "@/utils/url-slugs";
+import { productSatisfiesAllFilters } from "@/utils/parsers/search-predicate";
 
 const DisplayProducts = ({
   focusedPubkey,
@@ -139,13 +140,13 @@ const DisplayProducts = ({
 
     const filtered = productEvents.filter((product) => {
       if (focusedPubkey && product.pubkey !== focusedPubkey) return false;
-      if (!productSatisfiesAllFilters(product)) return false;
+      if (!productSatisfiesAllFilters(product, selectedCategories, selectedLocation, selectedSearch)) return false;
       if (!product.currency) return false;
       if (product.images.length === 0) return false;
       if (product.contentWarning) return false;
       if (
         product.pubkey ===
-          "3da2082b7aa5b76a8f0c134deab3f7848c3b5e3a3079c65947d88422b69c1755" &&
+        "3da2082b7aa5b76a8f0c134deab3f7848c3b5e3a3079c65947d88422b69c1755" &&
         userPubkey !== product.pubkey
       ) {
         return false;
@@ -219,7 +220,7 @@ const DisplayProducts = ({
     try {
       await deleteEvent(nostr!, signer!, [productId]);
       productEventContext.removeDeletedProductEvent(productId);
-    } catch (_) {
+      } catch {
       return;
     }
   };
@@ -260,81 +261,6 @@ const DisplayProducts = ({
     }
   };
 
-  const productSatisfiesCategoryFilter = (productData: ProductData) => {
-    if (selectedCategories.size === 0) return true;
-    return Array.from(selectedCategories).some((selectedCategory) => {
-      const re = new RegExp(selectedCategory, "gi");
-      return productData?.categories?.some((category) => {
-        const match = category.match(re);
-        return match && match.length > 0;
-      });
-    });
-  };
-
-  const productSatisfieslocationFilter = (productData: ProductData) => {
-    return !selectedLocation || productData.location === selectedLocation;
-  };
-
-  const productSatisfiesSearchFilter = (productData: ProductData) => {
-    if (!selectedSearch) return true;
-    if (!productData.title) return false;
-
-    if (selectedSearch.includes("naddr")) {
-      try {
-        const parsedNaddr = nip19.decode(selectedSearch);
-        if (parsedNaddr.type === "naddr") {
-          return (
-            productData.d === parsedNaddr.data.identifier &&
-            productData.pubkey === parsedNaddr.data.pubkey
-          );
-        }
-        return false;
-      } catch (_) {
-        return false;
-      }
-    }
-
-    if (selectedSearch.includes("npub")) {
-      try {
-        const parsedNpub = nip19.decode(selectedSearch);
-        if (parsedNpub.type === "npub") {
-          return parsedNpub.data === productData.pubkey;
-        }
-        return false;
-      } catch (_) {
-        return false;
-      }
-    }
-
-    try {
-      const re = new RegExp(selectedSearch, "gi");
-
-      const titleMatch = productData.title.match(re);
-      if (titleMatch && titleMatch.length > 0) return true;
-
-      if (productData.summary) {
-        const summaryMatch = productData.summary.match(re);
-        if (summaryMatch && summaryMatch.length > 0) return true;
-      }
-
-      const numericSearch = parseFloat(selectedSearch);
-      if (!isNaN(numericSearch) && productData.price === numericSearch) {
-        return true;
-      }
-
-      return false;
-    } catch (_) {
-      return false;
-    }
-  };
-
-  const productSatisfiesAllFilters = (productData: ProductData) => {
-    return (
-      productSatisfiesCategoryFilter(productData) &&
-      productSatisfieslocationFilter(productData) &&
-      productSatisfiesSearchFilter(productData)
-    );
-  };
 
   const getCurrentPageProducts = () => {
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -358,9 +284,9 @@ const DisplayProducts = ({
     <>
       <div className="w-full md:pl-4">
         {!isMyListings &&
-        (profileMapContext.isLoading ||
-          productEventContext.isLoading ||
-          isProductsLoading) ? (
+          (profileMapContext.isLoading ||
+            productEventContext.isLoading ||
+            isProductsLoading) ? (
           <div className="mb-6 mt-6 flex items-center justify-center">
             <ShopstrSpinner />
           </div>

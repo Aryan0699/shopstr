@@ -93,7 +93,7 @@ describe("ReceiveButton", () => {
     const cancelButton = within(modal).getByRole("button", { name: /Cancel/i });
     fireEvent.click(cancelButton);
     await waitFor(() => {
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(screen.getByRole("dialog")).not.toBeVisible();
     });
   });
 
@@ -278,6 +278,6 @@ describe("ReceiveButton", () => {
       "If the token is taking a while to be received, make sure to check your bunker application to approve the transaction events.";
     expect(
       await within(modal).findByText(infoMessage, { exact: false })
-    ).toBeInTheDocument();
+    ).toBeVisible();
   });
 });

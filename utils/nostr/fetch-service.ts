@@ -1024,7 +1024,9 @@ export const fetchReports = async (
 
       const addresses = products
         .map((product) => {
-          const dTag = product.tags.find((tag: string[]) => tag[0] === "d")?.[1];
+          const dTag = product.tags.find(
+            (tag: string[]) => tag[0] === "d"
+          )?.[1];
           if (!dTag) return null;
           return `30402:${product.pubkey}:${dTag}`;
         })

@@ -19,9 +19,9 @@ import {
 } from "@/components/utility-components/nostr-context-provider";
 import { getListingSlug } from "@/utils/url-slugs";
 import { productSatisfiesAllFilters } from "@/utils/parsers/search-predicate";
+import { mergeAndDeduplicateProducts } from "@/utils/nostr/nip50-search";
+import { useNip50Search } from "@/components/hooks/use-nip50-search";
 
-const escapeRegExp = (value: string) =>
-  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const DisplayProducts = ({
   focusedPubkey,
@@ -61,6 +61,8 @@ const DisplayProducts = ({
 
   const { nostr } = useContext(NostrContext);
   const { signer, pubkey: userPubkey } = useContext(SignerContext);
+  const { results: nip50Results, isSearching: isNip50Searching } =
+    useNip50Search(selectedSearch);
 
   // Load saved page from session storage on mount
   useEffect(() => {
@@ -83,11 +85,25 @@ const DisplayProducts = ({
     if (!productEventContext) return;
     if (!productEventContext.isLoading && productEventContext.productEvents) {
       setIsProductLoading(true);
-      const sortedProductEvents = [...productEventContext.productEvents].sort(
-        (a: NostrEvent, b: NostrEvent) => b.created_at - a.created_at
-      );
+      const sortedLocalProductEvents = [
+        ...productEventContext.productEvents.sort(
+          (a: NostrEvent, b: NostrEvent) => b.created_at - a.created_at
+        ),
+      ];
+
+      const normalizedSearch = selectedSearch.trim().toLowerCase();
+      const shouldMergeNip50 =
+        normalizedSearch.length >= 3 &&
+        !normalizedSearch.startsWith("npub") &&
+        !normalizedSearch.startsWith("naddr") &&
+        nip50Results.length > 0;
+
+      const mergedProductEvents = shouldMergeNip50
+        ? mergeAndDeduplicateProducts(sortedLocalProductEvents, nip50Results)
+        : sortedLocalProductEvents;
+
       const parsedProductData: ProductData[] = [];
-      sortedProductEvents.forEach((event) => {
+      mergedProductEvents.forEach((event) => {
         if (wotFilter) {
           if (!followsContext.isLoading && followsContext.followList) {
             const followList = followsContext.followList;
@@ -121,7 +137,7 @@ const DisplayProducts = ({
         setIsProductLoading(false);
       }
     }
-  }, [productEventContext, wotFilter]);
+  }, [productEventContext, wotFilter, nip50Results, selectedSearch]);
 
   useEffect(() => {
     if (focusedPubkey && setCategories) {
@@ -140,7 +156,15 @@ const DisplayProducts = ({
 
     const filtered = productEvents.filter((product) => {
       if (focusedPubkey && product.pubkey !== focusedPubkey) return false;
-      if (!productSatisfiesAllFilters(product, selectedCategories, selectedLocation, selectedSearch)) return false;
+      if (
+        !productSatisfiesAllFilters(
+          product,
+          selectedCategories,
+          selectedLocation,
+          selectedSearch
+        )
+      )
+        return false;
       if (!product.currency) return false;
       if (product.images.length === 0) return false;
       if (product.contentWarning) return false;
@@ -261,84 +285,6 @@ const DisplayProducts = ({
     }
   };
 
-  const productSatisfiesCategoryFilter = (productData: ProductData) => {
-    if (selectedCategories.size === 0) return true;
-    return Array.from(selectedCategories).some((selectedCategory) => {
-      const re = new RegExp(selectedCategory, "gi");
-      return productData?.categories?.some((category) => {
-        const match = category.match(re);
-        return match && match.length > 0;
-      });
-    });
-  };
-
-  const productSatisfieslocationFilter = (productData: ProductData) => {
-    return !selectedLocation || productData.location === selectedLocation;
-  };
-
-  const productSatisfiesSearchFilter = (productData: ProductData) => {
-    const normalizedSearch = selectedSearch.trim();
-
-    if (!normalizedSearch) return true;
-    if (!productData.title) return false;
-
-    if (normalizedSearch.includes("naddr")) {
-      try {
-        const parsedNaddr = nip19.decode(normalizedSearch);
-        if (parsedNaddr.type === "naddr") {
-          return (
-            productData.d === parsedNaddr.data.identifier &&
-            productData.pubkey === parsedNaddr.data.pubkey
-          );
-        }
-        return false;
-      } catch {
-        return false;
-      }
-    }
-
-    if (normalizedSearch.includes("npub")) {
-      try {
-        const parsedNpub = nip19.decode(normalizedSearch);
-        if (parsedNpub.type === "npub") {
-          return parsedNpub.data === productData.pubkey;
-        }
-        return false;
-      } catch {
-        return false;
-      }
-    }
-
-    try {
-      const re = new RegExp(escapeRegExp(normalizedSearch), "i");
-
-      const titleMatch = productData.title.match(re);
-      if (titleMatch && titleMatch.length > 0) return true;
-
-      if (productData.summary) {
-        const summaryMatch = productData.summary.match(re);
-        if (summaryMatch && summaryMatch.length > 0) return true;
-      }
-
-      const numericSearch = parseFloat(normalizedSearch);
-      if (!isNaN(numericSearch) && productData.price === numericSearch) {
-        return true;
-      }
-
-      return false;
-    } catch {
-      return false;
-    }
-  };
-
-  const productSatisfiesAllFilters = (productData: ProductData) => {
-    return (
-      productSatisfiesCategoryFilter(productData) &&
-      productSatisfieslocationFilter(productData) &&
-      productSatisfiesSearchFilter(productData)
-    );
-  };
-
   const getCurrentPageProducts = () => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
@@ -399,6 +345,12 @@ const DisplayProducts = ({
               {Math.min(filteredProducts.length, currentPage * itemsPerPage)} of{" "}
               {filteredProducts.length} products
             </div>
+
+            {isNip50Searching && (
+              <div className="mb-6 text-center text-xs text-light-text dark:text-dark-text">
+                Searching relays for additional results...
+              </div>
+            )}
           </>
         ) : (
           wotFilter &&

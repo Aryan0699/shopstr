@@ -54,7 +54,6 @@ export const ProfileWithDropdown = ({
   const [displayName, setDisplayName] = useState("");
   const [isNPubCopied, setIsNPubCopied] = useState(false);
   const [isNip05Verified, setIsNip05Verified] = useState(false);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const profileContext = useContext(ProfileMapContext);
   const shopMapContext = useContext(ShopMapContext);
   const npub = pubkey ? nip19.npubEncode(pubkey) : "";
@@ -83,7 +82,7 @@ export const ProfileWithDropdown = ({
         });
         if (content.picture) setPfp(content.picture);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [pubkey, npub]);
 
   useEffect(() => {
@@ -243,9 +242,10 @@ export const ProfileWithDropdown = ({
       color: "danger",
       className: "text-red-500",
       startContent: <FlagIcon className={"h-5 w-5"} />,
-      onClick: () => {
-        setIsDropdownOpen(false);
-        setShowReportModal(true);
+      onPress: () => {
+        handleDropdownAction(() => {
+          setShowReportModal(true);
+        });
       },
       label: "Report Seller",
     },
@@ -266,11 +266,10 @@ export const ProfileWithDropdown = ({
             }}
             className={"transition-transform"}
             classNames={{
-              name: `overflow-hidden text-ellipsis whitespace-nowrap text-light-text dark:text-dark-text hidden ${nameClassname} ${
-                isNip05Verified
-                  ? "text-shopstr-purple dark:text-shopstr-yellow"
-                  : ""
-              }`,
+              name: `overflow-hidden text-ellipsis whitespace-nowrap text-light-text dark:text-dark-text hidden ${nameClassname} ${isNip05Verified
+                ? "text-shopstr-purple dark:text-shopstr-yellow"
+                : ""
+                }`,
               base: `${baseClassname}`,
             }}
             name={displayName}

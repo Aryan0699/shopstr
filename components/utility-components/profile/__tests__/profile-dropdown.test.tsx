@@ -168,6 +168,9 @@ describe("ProfileWithDropdown", () => {
     mockOnOpen.mockClear();
     (LogOut as jest.Mock).mockClear();
     (navigator.clipboard.writeText as jest.Mock).mockClear();
+    (global as any).fetch = jest.fn().mockResolvedValue({
+      json: async () => ({}),
+    });
   });
 
   it("renders with fallback data and correct dropdown items", () => {
@@ -331,6 +334,8 @@ describe("ProfileWithDropdown", () => {
       <ProfileWithDropdown pubkey={pubkey} dropDownKeys={["report"]} />,
       {}
     );
+
+    openDropdownMenu();
 
     fireEvent.click(screen.getByText("Report Seller"));
     expect(screen.getByTestId("report-modal")).toBeInTheDocument();

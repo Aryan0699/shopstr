@@ -278,8 +278,58 @@ function Shopstr({ props }: { props: AppProps }) {
   const [followsContext, setFollowsContext] = useState<FollowsContextInterface>(
     {
       followList: [],
+      directFollowList: [],
       firstDegreeFollowsLength: 0,
+      isFallbackFollows: false,
       isLoading: true,
+      addFollow: (pubkey: string) => {
+        setFollowsContext((prev) => {
+          const normalizedPubkey = pubkey.trim();
+          if (!normalizedPubkey) return prev;
+
+          const directFollowSet = new Set(prev.directFollowList);
+          const followSet = new Set(prev.followList);
+
+          if (!directFollowSet.has(normalizedPubkey)) {
+            directFollowSet.add(normalizedPubkey);
+          }
+
+          if (!followSet.has(normalizedPubkey)) {
+            followSet.add(normalizedPubkey);
+          }
+
+          return {
+            ...prev,
+            directFollowList: Array.from(directFollowSet),
+            followList: Array.from(followSet),
+            firstDegreeFollowsLength: directFollowSet.size,
+            isFallbackFollows: false,
+            isLoading: false,
+          };
+        });
+      },
+      removeFollow: (pubkey: string) => {
+        setFollowsContext((prev) => {
+          const normalizedPubkey = pubkey.trim();
+          if (!normalizedPubkey) return prev;
+
+          const nextDirectFollows = prev.directFollowList.filter(
+            (followedPubkey) => followedPubkey !== normalizedPubkey
+          );
+
+          const nextFollowList = prev.followList.filter(
+            (followedPubkey) => followedPubkey !== normalizedPubkey
+          );
+
+          return {
+            ...prev,
+            directFollowList: nextDirectFollows,
+            followList: nextFollowList,
+            firstDegreeFollowsLength: nextDirectFollows.length,
+            isLoading: false,
+          };
+        });
+      },
     }
   );
 
@@ -409,14 +459,19 @@ function Shopstr({ props }: { props: AppProps }) {
 
   const editFollowsContext = (
     followList: string[],
+    directFollowList: string[],
     firstDegreeFollowsLength: number,
+    isFallbackFollows: boolean,
     isLoading: boolean
   ) => {
-    setFollowsContext({
+    setFollowsContext((prev) => ({
+      ...prev,
       followList,
+      directFollowList,
       firstDegreeFollowsLength,
+      isFallbackFollows,
       isLoading,
-    });
+    }));
   };
 
   const editCommunityContext = (
@@ -662,7 +717,7 @@ function Shopstr({ props }: { props: AppProps }) {
           );
         } catch (error) {
           console.error("Error fetching follows:", error);
-          editFollowsContext([], 0, false);
+          editFollowsContext([], [], 0, false, false);
         }
 
         // After all fetching operations complete, retry failed relay publishes
@@ -680,7 +735,7 @@ function Shopstr({ props }: { props: AppProps }) {
         editShopContext(new Map(), false);
         editProfileContext(new Map(), false);
         editChatContext(new Map(), false);
-        editFollowsContext([], 0, false);
+        editFollowsContext([], [], 0, false, false);
         editRelaysContext([], [], [], false);
         editBlossomContext([], false);
         editCashuWalletContext([], [], [], false);

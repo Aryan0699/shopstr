@@ -78,7 +78,10 @@ const renderComponent = ({
     typeof routerQuery.npub === "string" ||
     (Array.isArray(routerQuery.npub) && typeof routerQuery.npub[0] === "string")
   ) {
-    (nip19.decode as jest.Mock).mockReturnValue({ data: "decoded-pubkey" });
+    (nip19.decode as jest.Mock).mockReturnValue({
+      type: "npub",
+      data: "decoded-pubkey",
+    });
   }
 
   const mockOnOpen = jest.fn();
@@ -132,8 +135,12 @@ const renderComponent = ({
             <FollowsContext.Provider
               value={{
                 followList: [],
+                directFollowList: [],
                 firstDegreeFollowsLength: 0,
+                isFallbackFollows: false,
                 isLoading: false,
+                addFollow: jest.fn(),
+                removeFollow: jest.fn(),
               }}
             >
               <MarketplacePage

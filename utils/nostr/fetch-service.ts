@@ -909,12 +909,17 @@ export const fetchAllFollows = async (
   relays: string[],
   editFollowsContext: (
     followList: string[],
+    directFollowList: string[],
     firstDegreeFollowsLength: number,
+    isFallbackFollows: boolean,
     isLoading: boolean
   ) => void,
   userPubkey?: string
 ): Promise<{
   followList: string[];
+  directFollowList: string[];
+  firstDegreeFollowsLength: number;
+  isFallbackFollows: boolean;
 }> => {
   const wot = getLocalStorageData().wot;
   const defaultAuthor =
@@ -922,9 +927,7 @@ export const fetchAllFollows = async (
 
   const fetchFollows = async (userPubkey: string) => {
     let secondDegreeFollowsArrayFromRelay: string[] = [];
-    let firstDegreeFollowsLength = 0;
-    let followsArrayFromRelay: string[] = [];
-    const followsSet: Set<string> = new Set();
+    const directFollowsSet: Set<string> = new Set();
 
     // fetch first-degree follows
     let fetchedEvents = await nostr.fetch(
@@ -937,28 +940,33 @@ export const fetchAllFollows = async (
       {},
       relays
     );
-    const authors: string[] = [];
+
     for (const event of fetchedEvents) {
       const validTags = event.tags
         .map((tag) => tag[1])
-        .filter((pubkey) => isHexString(pubkey!) && !followsSet.has(pubkey!));
-      validTags.forEach((pubkey) => followsSet.add(pubkey!));
-      followsArrayFromRelay.push(...(validTags as string[]));
-      firstDegreeFollowsLength = followsArrayFromRelay.length;
-      authors.push(...followsArrayFromRelay);
+        .filter(
+          (pubkey) => isHexString(pubkey!) && !directFollowsSet.has(pubkey!)
+        );
+      validTags.forEach((pubkey) => directFollowsSet.add(pubkey!));
     }
 
+    const directFollowList = Array.from(directFollowsSet);
+    const firstDegreeFollowsLength = directFollowList.length;
+    const followsSet = new Set(directFollowList);
+
     // Fetch second-degree follows
-    fetchedEvents = await nostr.fetch(
-      [
-        {
-          kinds: [3],
-          authors,
-        },
-      ],
-      {},
-      relays
-    );
+    fetchedEvents = directFollowList.length
+      ? await nostr.fetch(
+          [
+            {
+              kinds: [3],
+              authors: directFollowList,
+            },
+          ],
+          {},
+          relays
+        )
+      : [];
 
     for (const followEvent of fetchedEvents) {
       const validFollowTags = followEvent.tags
@@ -976,27 +984,52 @@ export const fetchAllFollows = async (
         (pubkey) => (pubkeyCount.get(pubkey) || 0) >= wot
       );
     // Concatenate arrays ensuring uniqueness
-    followsArrayFromRelay = Array.from(
-      new Set(followsArrayFromRelay.concat(secondDegreeFollowsArrayFromRelay))
+    const followsArrayFromRelay = Array.from(
+      new Set(directFollowList.concat(secondDegreeFollowsArrayFromRelay))
     );
+
     return {
       followsArrayFromRelay,
+      directFollowList,
       firstDegreeFollowsLength,
     };
   };
 
-  let { followsArrayFromRelay, firstDegreeFollowsLength } = await fetchFollows(
-    userPubkey || defaultAuthor
+  let followsArrayFromRelay: string[] = [];
+  let directFollowList: string[] = [];
+  let firstDegreeFollowsLength = 0;
+  let isFallbackFollows = !userPubkey;
+
+  if (userPubkey) {
+    const userFollows = await fetchFollows(userPubkey);
+    followsArrayFromRelay = userFollows.followsArrayFromRelay;
+    directFollowList = userFollows.directFollowList;
+    firstDegreeFollowsLength = userFollows.firstDegreeFollowsLength;
+
+    if (!followsArrayFromRelay.length) {
+      isFallbackFollows = true;
+      const fallbackFollows = await fetchFollows(defaultAuthor);
+      followsArrayFromRelay = fallbackFollows.followsArrayFromRelay;
+    }
+  } else {
+    const fallbackFollows = await fetchFollows(defaultAuthor);
+    followsArrayFromRelay = fallbackFollows.followsArrayFromRelay;
+    firstDegreeFollowsLength = fallbackFollows.firstDegreeFollowsLength;
+  }
+
+  editFollowsContext(
+    followsArrayFromRelay,
+    directFollowList,
+    firstDegreeFollowsLength,
+    isFallbackFollows,
+    false
   );
 
-  if (!followsArrayFromRelay?.length) {
-    // If followsArrayFromRelay is still empty, add the default value
-    ({ followsArrayFromRelay, firstDegreeFollowsLength } =
-      await fetchFollows(defaultAuthor));
-  }
-  editFollowsContext(followsArrayFromRelay, firstDegreeFollowsLength, false);
   return {
     followList: followsArrayFromRelay,
+    directFollowList,
+    firstDegreeFollowsLength,
+    isFallbackFollows,
   };
 };
 

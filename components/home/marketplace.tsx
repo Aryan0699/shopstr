@@ -32,7 +32,10 @@ import DisplayProducts from "../display-products";
 import LocationDropdown from "../utility-components/dropdowns/location-dropdown";
 import { ProfileWithDropdown } from "@/components/utility-components/profile/profile-dropdown";
 import { CATEGORIES, SHOPSTRBUTTONCLASSNAMES } from "@/utils/STATIC-VARIABLES";
-import { SignerContext } from "@/components/utility-components/nostr-context-provider";
+import {
+  NostrContext,
+  SignerContext,
+} from "@/components/utility-components/nostr-context-provider";
 import parseTags, {
   ProductData,
 } from "@/utils/parsers/product-parser-functions";
@@ -51,6 +54,11 @@ import {
   isNpub,
 } from "@/utils/url-slugs";
 import { useDebounce } from "@/utils/hooks/useDebounce";
+import {
+  followUser,
+  getLocalStorageData,
+  unfollowUser,
+} from "@/utils/nostr/nostr-helper-functions";
 
 export function normalizeNpub(
   npub: string | string[] | undefined
@@ -120,8 +128,9 @@ function MarketplacePage({
   const productEventContext = useContext(ProductContext);
   const profileMapContext = useContext(ProfileMapContext);
 
-  const { pubkey: userPubkey, isLoggedIn: loggedIn } =
+  const { pubkey: userPubkey, isLoggedIn: loggedIn, signer } =
     useContext(SignerContext);
+  const { nostr } = useContext(NostrContext);
 
   const searchBarRef = useRef<HTMLDivElement>(null);
 
@@ -236,7 +245,7 @@ function MarketplacePage({
 
   useEffect(() => {
     setIsFetchingFollows(true);
-    if (followsContext.followList.length && !followsContext.isLoading) {
+    if (!followsContext.isLoading) {
       setIsFetchingFollows(false);
     }
   }, [followsContext]);
@@ -261,6 +270,51 @@ function MarketplacePage({
       router.push("/my-listings?addNewListing");
     } else {
       onOpen();
+    }
+  };
+
+  const isOwnSellerView = !!userPubkey && userPubkey === focusedPubkey;
+  const isFollowingMerchant = followsContext.directFollowList.includes(
+    focusedPubkey
+  );
+
+  const handleFollowToggle = async () => {
+    if (!focusedPubkey || isOwnSellerView) return;
+
+    if (!loggedIn || !signer || !nostr) {
+      onOpen();
+      return;
+    }
+
+    const wasFollowing = followsContext.directFollowList.includes(focusedPubkey);
+
+    try {
+      if (wasFollowing) {
+        followsContext.removeFollow(focusedPubkey);
+        await unfollowUser(
+          nostr,
+          signer,
+          focusedPubkey,
+          getLocalStorageData().relays
+        );
+      } else {
+        followsContext.addFollow(focusedPubkey);
+        await followUser(
+          nostr,
+          signer,
+          focusedPubkey,
+          getLocalStorageData().relays
+        );
+      }
+    } catch (error) {
+      // Roll back optimistic update when publish fails.
+      if (wasFollowing) {
+        followsContext.addFollow(focusedPubkey);
+      } else {
+        followsContext.removeFollow(focusedPubkey);
+      }
+      console.error("Failed to update merchant follow status:", error);
+      window.alert("Could not update follow status. Please try again.");
     }
   };
 
@@ -329,7 +383,12 @@ function MarketplacePage({
                           dropDownKeys={
                             reviewerPubkey === userPubkey
                               ? ["shop_profile"]
-                              : ["shop", "inquiry", "copy_npub"]
+                              : [
+                                  "shop",
+                                  "inquiry",
+                                  "follow_toggle",
+                                  "copy_npub",
+                                ]
                           }
                         />
                       </div>
@@ -448,6 +507,14 @@ function MarketplacePage({
               >
                 Message
               </Button>
+              {!isOwnSellerView && focusedPubkey && (
+                <Button
+                  className={`text-sm sm:text-base ${SHOPSTRBUTTONCLASSNAMES}`}
+                  onClick={handleFollowToggle}
+                >
+                  {isFollowingMerchant ? "Following" : "+ Follow"}
+                </Button>
+              )}
               {rawEvent && (
                 <Dropdown>
                   <DropdownTrigger>
@@ -528,10 +595,18 @@ function MarketplacePage({
                 }}
               />
               {!isFetchingFollows ? (
-                <ShopstrSwitch
-                  wotFilter={wotFilter}
-                  setWotFilter={setWotFilter}
-                />
+                <div className="flex flex-col">
+                  <ShopstrSwitch
+                    wotFilter={wotFilter}
+                    setWotFilter={setWotFilter}
+                  />
+                  {followsContext.isFallbackFollows && (
+                    <p className="pt-1 text-xs text-light-text/70 dark:text-dark-text/70">
+                      Using default trusted network. Follow merchants to
+                      personalize your Trust filter.
+                    </p>
+                  )}
+                </div>
               ) : null}
             </div>
           </div>

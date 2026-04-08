@@ -1,5 +1,14 @@
-import { LogOut } from "@/utils/nostr/nostr-helper-functions";
-import { ProfileMapContext, ShopMapContext } from "@/utils/context/context";
+import {
+  followUser,
+  getLocalStorageData,
+  LogOut,
+  unfollowUser,
+} from "@/utils/nostr/nostr-helper-functions";
+import {
+  FollowsContext,
+  ProfileMapContext,
+  ShopMapContext,
+} from "@/utils/context/context";
 import {
   Dropdown,
   DropdownItem,
@@ -16,14 +25,17 @@ import {
   ArrowRightStartOnRectangleIcon,
   BuildingStorefrontIcon,
   ChatBubbleBottomCenterIcon,
+  CheckCircleIcon,
   CheckIcon,
   ClipboardIcon,
   Cog6ToothIcon,
+  PlusCircleIcon,
   GlobeAltIcon,
   UserIcon,
 } from "@heroicons/react/24/outline";
 import { useRouter } from "next/router";
 import { SignerContext } from "@/components/utility-components/nostr-context-provider";
+import { NostrContext } from "@/components/utility-components/nostr-context-provider";
 import SignInModal from "../../sign-in/SignInModal";
 
 type DropDownKeys =
@@ -34,7 +46,8 @@ type DropDownKeys =
   | "settings"
   | "user_profile"
   | "logout"
-  | "copy_npub";
+  | "copy_npub"
+  | "follow_toggle";
 
 export const ProfileWithDropdown = ({
   pubkey,
@@ -53,11 +66,14 @@ export const ProfileWithDropdown = ({
   const [isNip05Verified, setIsNip05Verified] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const profileContext = useContext(ProfileMapContext);
+  const followsContext = useContext(FollowsContext);
   const shopMapContext = useContext(ShopMapContext);
   const npub = pubkey ? nip19.npubEncode(pubkey) : "";
   const router = useRouter();
-  const { isLoggedIn } = useContext(SignerContext);
+  const { isLoggedIn, pubkey: userPubkey, signer } = useContext(SignerContext);
+  const { nostr } = useContext(NostrContext);
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const [isFollowPending, setIsFollowPending] = useState(false);
 
   const handleDropdownAction = (action: () => void) => {
     setIsDropdownOpen(false);
@@ -101,6 +117,53 @@ export const ProfileWithDropdown = ({
     );
     setIsNip05Verified(profile?.nip05Verified || false);
   }, [profileContext, pubkey]);
+
+  const isSelf = !!userPubkey && userPubkey === pubkey;
+  const isFollowing = followsContext.directFollowList.includes(pubkey);
+
+  const handleFollowToggle = async () => {
+    handleDropdownAction(async () => {
+      if (isSelf || isFollowPending) return;
+
+      if (!isLoggedIn || !signer || !nostr) {
+        onOpen();
+        return;
+      }
+
+      const wasFollowing = followsContext.directFollowList.includes(pubkey);
+      setIsFollowPending(true);
+
+      try {
+        if (wasFollowing) {
+          followsContext.removeFollow(pubkey);
+          await unfollowUser(
+            nostr,
+            signer,
+            pubkey,
+            getLocalStorageData().relays
+          );
+        } else {
+          followsContext.addFollow(pubkey);
+          await followUser(
+            nostr,
+            signer,
+            pubkey,
+            getLocalStorageData().relays
+          );
+        }
+      } catch (error) {
+        if (wasFollowing) {
+          followsContext.addFollow(pubkey);
+        } else {
+          followsContext.removeFollow(pubkey);
+        }
+        console.error("Failed to update follow status:", error);
+        window.alert("Could not update follow status. Please try again.");
+      } finally {
+        setIsFollowPending(false);
+      }
+    });
+  };
 
   const DropDownItems: {
     [key in DropDownKeys]: DropdownItemProps & { label: string };
@@ -233,7 +296,23 @@ export const ProfileWithDropdown = ({
       },
       label: isNPubCopied ? "Copied!" : "Copy npub",
     },
+    follow_toggle: {
+      key: "follow_toggle",
+      color: "default",
+      className: "text-light-text dark:text-dark-text",
+      startContent: isFollowing ? (
+        <CheckCircleIcon className="h-5 w-5" />
+      ) : (
+        <PlusCircleIcon className="h-5 w-5" />
+      ),
+      onPress: handleFollowToggle,
+      label: isSelf ? "You" : isFollowing ? "Unfollow Merchant" : "Follow Merchant",
+    },
   };
+
+  const menuItems = dropDownKeys
+    .map((key) => DropDownItems[key])
+    .filter((item) => !(item.key === "follow_toggle" && isSelf));
 
   return (
     <>
@@ -263,7 +342,7 @@ export const ProfileWithDropdown = ({
         <DropdownMenu
           aria-label="User Actions"
           variant="flat"
-          items={dropDownKeys.map((key) => DropDownItems[key])}
+          items={menuItems}
         >
           {(item) => {
             return (

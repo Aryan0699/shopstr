@@ -58,8 +58,12 @@ describe("DisplayProducts search filtering", () => {
             <FollowsContext.Provider
               value={{
                 followList: [],
+                directFollowList: [],
                 firstDegreeFollowsLength: 0,
+                isFallbackFollows: false,
                 isLoading: false,
+                addFollow: jest.fn(),
+                removeFollow: jest.fn(),
               }}
             >
               <ProductContext.Provider

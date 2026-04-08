@@ -1479,7 +1479,16 @@ const OrdersDashboard = () => {
                             return displayPubkey ? (
                               <ProfileWithDropdown
                                 pubkey={displayPubkey}
-                                dropDownKeys={["shop", "inquiry", "copy_npub"]}
+                                dropDownKeys={
+                                  displayPubkey === userPubkey
+                                    ? ["shop_profile"]
+                                    : [
+                                        "shop",
+                                        "inquiry",
+                                        "follow_toggle",
+                                        "copy_npub",
+                                      ]
+                                }
                                 nameClassname="block"
                               />
                             ) : (

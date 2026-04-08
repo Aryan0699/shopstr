@@ -1034,6 +1034,149 @@ export async function finalizeAndSendNostrEvent(
   }
 }
 
+const normalizeFollowKey = (value: string) => value.trim().toLowerCase();
+
+const extractFollowPubkeys = (tags: string[][]): string[] => {
+  const followSet = new Set<string>();
+
+  tags.forEach((tag) => {
+    if (tag[0] !== "p") return;
+    const candidate = tag[1]?.trim();
+    if (!candidate) return;
+    followSet.add(candidate);
+  });
+
+  return Array.from(followSet);
+};
+
+const getLatestContactsEvent = async (
+  nostr: NostrManager,
+  relays: string[],
+  userPubkey: string
+) => {
+  const events = await nostr.fetch(
+    [
+      {
+        kinds: [3],
+        authors: [userPubkey],
+      },
+    ],
+    {},
+    relays
+  );
+
+  return events
+    .slice()
+    .sort((a, b) => {
+      if ((b.created_at || 0) !== (a.created_at || 0)) {
+        return (b.created_at || 0) - (a.created_at || 0);
+      }
+      return (b.id || "").localeCompare(a.id || "");
+    })[0];
+};
+
+export async function followUser(
+  nostr: NostrManager,
+  signer: NostrSigner,
+  merchantPubkey: string,
+  relays?: string[]
+): Promise<{ follows: string[]; changed: boolean }> {
+  const normalizedMerchantPubkey = normalizeFollowKey(merchantPubkey);
+  if (!normalizedMerchantPubkey) {
+    throw new Error("Invalid merchant pubkey");
+  }
+
+  const userPubkey = await signer.getPubKey();
+  const relayPool = relays?.length ? relays : getLocalStorageData().relays || [];
+  const latestContactsEvent = await getLatestContactsEvent(
+    nostr,
+    relayPool,
+    userPubkey
+  );
+
+  const existingTags = latestContactsEvent?.tags || [];
+  const existingFollows = extractFollowPubkeys(existingTags);
+  const alreadyFollowing = existingFollows.some(
+    (pubkey) => normalizeFollowKey(pubkey) === normalizedMerchantPubkey
+  );
+
+  if (alreadyFollowing) {
+    return {
+      follows: existingFollows,
+      changed: false,
+    };
+  }
+
+  const updatedTags = [...existingTags, ["p", normalizedMerchantPubkey]];
+  const contactEvent: EventTemplate = {
+    kind: 3,
+    content: latestContactsEvent?.content || "",
+    tags: updatedTags,
+    created_at: Math.floor(Date.now() / 1000),
+  };
+
+  await finalizeAndSendNostrEvent(signer, nostr, contactEvent);
+
+  return {
+    follows: [...existingFollows, normalizedMerchantPubkey],
+    changed: true,
+  };
+}
+
+export async function unfollowUser(
+  nostr: NostrManager,
+  signer: NostrSigner,
+  merchantPubkey: string,
+  relays?: string[]
+): Promise<{ follows: string[]; changed: boolean }> {
+  const normalizedMerchantPubkey = normalizeFollowKey(merchantPubkey);
+  if (!normalizedMerchantPubkey) {
+    throw new Error("Invalid merchant pubkey");
+  }
+
+  const userPubkey = await signer.getPubKey();
+  const relayPool = relays?.length ? relays : getLocalStorageData().relays || [];
+  const latestContactsEvent = await getLatestContactsEvent(
+    nostr,
+    relayPool,
+    userPubkey
+  );
+
+  const existingTags = latestContactsEvent?.tags || [];
+  const existingFollows = extractFollowPubkeys(existingTags);
+  const wasFollowing = existingFollows.some(
+    (pubkey) => normalizeFollowKey(pubkey) === normalizedMerchantPubkey
+  );
+
+  if (!wasFollowing) {
+    return {
+      follows: existingFollows,
+      changed: false,
+    };
+  }
+
+  const updatedTags = existingTags.filter(
+    (tag) =>
+      tag[0] !== "p" || normalizeFollowKey(tag[1] || "") !== normalizedMerchantPubkey
+  );
+
+  const contactEvent: EventTemplate = {
+    kind: 3,
+    content: latestContactsEvent?.content || "",
+    tags: updatedTags,
+    created_at: Math.floor(Date.now() / 1000),
+  };
+
+  await finalizeAndSendNostrEvent(signer, nostr, contactEvent);
+
+  return {
+    follows: existingFollows.filter(
+      (pubkey) => normalizeFollowKey(pubkey) !== normalizedMerchantPubkey
+    ),
+    changed: true,
+  };
+}
+
 export type BlossomUploadResponse = {
   url: string;
   sha256: string;

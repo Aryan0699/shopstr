@@ -124,7 +124,7 @@ describe("ProductCard", () => {
       );
       const dropdown = screen.getByTestId("profile-dropdown");
       const keys = JSON.parse(dropdown.getAttribute("data-keys")!);
-      expect(keys).toEqual(["shop", "inquiry", "copy_npub"]);
+      expect(keys).toEqual(["shop", "inquiry", "follow_toggle", "copy_npub"]);
     });
 
     it("shows sold status correctly", () => {

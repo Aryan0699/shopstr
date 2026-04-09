@@ -10,7 +10,7 @@ import {
   decryptNpub,
   generateKeys,
 } from "@/utils/nostr/nostr-helper-functions";
-import { ChatsContext } from "../../utils/context/context";
+import { useChatStore } from "@/utils/store/chat-store";
 import ShopstrSpinner from "../utility-components/shopstr-spinner";
 import ChatPanel from "./chat-panel";
 import ChatButton from "./chat-button";
@@ -27,7 +27,8 @@ import { SHOPSTRBUTTONCLASSNAMES } from "@/utils/STATIC-VARIABLES";
 const Messages = ({ isPayment }: { isPayment: boolean }) => {
   const router = useRouter();
   const { isOpen, onOpen, onClose } = useDisclosure();
-  const chatsContext = useContext(ChatsContext);
+  const chatsMapFromStore = useChatStore((s) => s.chatsMap);
+  const isChatStoreLoading = useChatStore((s) => s.isLoading);
   const arrowUpPressed = useKeyPress("ArrowUp");
   const arrowDownPressed = useKeyPress("ArrowDown");
   const escapePressed = useKeyPress("Escape");
@@ -75,11 +76,11 @@ const Messages = ({ isPayment }: { isPayment: boolean }) => {
 
   useEffect(() => {
     async function loadChats() {
-      if (!chatsContext) {
+      if (!chatsMapFromStore) {
         setIsChatsLoading(false);
         return;
       }
-      if (!chatsContext.isLoading && chatsContext.chatsMap) {
+      if (!isChatStoreLoading && chatsMapFromStore) {
         // comes here only if signInMethod is extension or its nsec and passphrase is valid
         const decryptedChats = await getDecryptedChatsFromContext();
         const passedNPubkey = router.query.pk ? router.query.pk : null;
@@ -98,12 +99,12 @@ const Messages = ({ isPayment }: { isPayment: boolean }) => {
           // if the current chat is already open, mark all messages as read
           markAllMessagesAsReadInChatRoom(currentChatPubkey);
         }
-        setIsChatsLoading(chatsContext.isLoading);
+        setIsChatsLoading(isChatStoreLoading);
         return;
       }
     }
     loadChats();
-  }, [chatsContext, isPayment]);
+  }, [chatsMapFromStore, isChatStoreLoading, isPayment]);
 
   useEffect(() => {
     const sortedChatsByLastMessage = Array.from(chatsMap.entries()).sort(
@@ -156,7 +157,7 @@ const Messages = ({ isPayment }: { isPayment: boolean }) => {
     Map<string, ChatObject>
   > = async () => {
     const decryptedChats: Map<string, ChatObject> = new Map(); //  entry: [chatPubkey, chat]
-    for (const entry of chatsContext.chatsMap) {
+    for (const entry of chatsMapFromStore) {
       const chatPubkey = entry[0] as string;
       const chat = entry[1] as NostrMessageEvent[];
       const decryptedChat: NostrMessageEvent[] = [];
@@ -202,7 +203,7 @@ const Messages = ({ isPayment }: { isPayment: boolean }) => {
       const updatedChat = prevChatMap.get(pubkeyOfChat) as ChatObject;
       if (updatedChat) {
         updatedChat.unreadCount = 0;
-        const encryptedChat = chatsContext.chatsMap.get(
+        const encryptedChat = chatsMapFromStore.get(
           pubkeyOfChat
         ) as NostrMessageEvent[];
         if (!encryptedChat) return prevChatMap;
@@ -286,12 +287,13 @@ const Messages = ({ isPayment }: { isPayment: boolean }) => {
       );
       await sendGiftWrappedMessageEvent(nostr!, senderGiftWrappedEvent);
       await sendGiftWrappedMessageEvent(nostr!, receiverGiftWrappedEvent);
-      chatsContext.addNewlyCreatedMessageEvent(
+      useChatStore.getState().addNewlyCreatedMessageEvent(
         {
           ...giftWrappedMessageEvent,
           sig: "",
           read: true,
         },
+        signer,
         true
       );
 

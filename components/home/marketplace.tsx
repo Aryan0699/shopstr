@@ -25,9 +25,9 @@ import {
   ReviewsContext,
   ShopMapContext,
   FollowsContext,
-  ProductContext,
   ProfileMapContext,
 } from "@/utils/context/context";
+import { useProductStore } from "@/utils/store/product-store";
 import DisplayProducts from "../display-products";
 import LocationDropdown from "../utility-components/dropdowns/location-dropdown";
 import { ProfileWithDropdown } from "@/components/utility-components/profile/profile-dropdown";
@@ -117,7 +117,7 @@ function MarketplacePage({
   const reviewsContext = useContext(ReviewsContext);
   const shopMapContext = useContext(ShopMapContext);
   const followsContext = useContext(FollowsContext);
-  const productEventContext = useContext(ProductContext);
+  const productEvents = useProductStore((s) => s.productEvents);
   const profileMapContext = useContext(ProfileMapContext);
 
   const { pubkey: userPubkey, isLoggedIn: loggedIn } =
@@ -270,7 +270,7 @@ function MarketplacePage({
       return;
     }
 
-    const allParsed = productEventContext.productEvents
+    const allParsed = productEvents
       .filter((e: Event) => e.kind !== 1)
       .map((e: Event) => parseTags(e))
       .filter((p: ProductData | undefined): p is ProductData => !!p);

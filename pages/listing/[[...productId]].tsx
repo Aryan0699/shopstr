@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import {
   Modal,
@@ -22,7 +22,7 @@ import parseTags, {
 import { parseZapsnagNote } from "@/utils/parsers/zapsnag-parser";
 import CheckoutCard from "../../components/utility-components/checkout-card";
 import ZapsnagButton from "../../components/ZapsnagButton";
-import { ProductContext } from "../../utils/context/context";
+import { useProductStore } from "@/utils/store/product-store";
 import { Event, nip19 } from "nostr-tools";
 import {
   RawEventModal,
@@ -126,7 +126,8 @@ const Listing = () => {
   const [cashuPaymentSent, setCashuPaymentSent] = useState(false);
   const [cashuPaymentFailed, setCashuPaymentFailed] = useState(false);
 
-  const productContext = useContext(ProductContext);
+  const productEvents = useProductStore((s) => s.productEvents);
+  const isProductLoading = useProductStore((s) => s.isLoading);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -149,8 +150,8 @@ const Listing = () => {
   }, [router]);
 
   useEffect(() => {
-    if (!productContext.isLoading && productContext.productEvents) {
-      const allParsed = productContext.productEvents
+    if (!isProductLoading && productEvents) {
+      const allParsed = productEvents
         .filter((e: Event) => e.kind !== 1)
         .map((e: Event) => parseTags(e))
         .filter((p: ProductData | undefined): p is ProductData => !!p);
@@ -159,13 +160,13 @@ const Listing = () => {
 
       const slugMatch = findProductBySlug(productIdString, allParsed);
       if (slugMatch) {
-        matchingEvent = productContext.productEvents.find(
+        matchingEvent = productEvents.find(
           (e: Event) => e.id === slugMatch.id
         );
       }
 
       if (!matchingEvent) {
-        matchingEvent = productContext.productEvents.find((event: Event) => {
+        matchingEvent = productEvents.find((event: Event) => {
           const naddrMatch =
             nip19.naddrEncode({
               identifier:
@@ -211,7 +212,7 @@ const Listing = () => {
         }
       }
     }
-  }, [productContext.isLoading, productContext.productEvents, productIdString]);
+  }, [isProductLoading, productEvents, productIdString]);
 
   return (
     <StorefrontThemeWrapper sellerPubkey={sfSellerPubkey}>

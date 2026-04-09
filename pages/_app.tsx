@@ -1,18 +1,13 @@
 import "tailwindcss/tailwind.css";
 import type { AppProps } from "next/app";
 import "../styles/globals.css";
-import { useState, useEffect, useCallback, useContext } from "react";
+import { useState, useEffect, useContext } from "react";
 import { useRouter } from "next/router";
 import {
   ProfileMapContext,
   ProfileContextInterface,
   ShopMapContext,
   ShopContextInterface,
-  ProductContext,
-  ProductContextInterface,
-  ChatsContextInterface,
-  ChatsContext,
-  ChatsMap,
   ReviewsContextInterface,
   ReviewsContext,
   FollowsContextInterface,
@@ -49,7 +44,6 @@ import {
   NostrEvent,
   Community,
   ProfileData,
-  NostrMessageEvent,
   ShopProfile,
 } from "../utils/types/types";
 import { Proof } from "@cashu/cashu-ts";
@@ -64,44 +58,18 @@ import {
 } from "@/components/utility-components/nostr-context-provider";
 import { retryFailedRelayPublishes } from "@/utils/nostr/retry-service";
 import { NostrManager } from "@/utils/nostr/nostr-manager";
+import { useProductStore } from "@/utils/store/product-store";
+import { useChatStore } from "@/utils/store/chat-store";
 
 function Shopstr({ props }: { props: AppProps }) {
   const { Component, pageProps } = props;
   const { nostr } = useContext(NostrContext);
   const { signer, isLoggedIn } = useContext(SignerContext);
 
-  const [productContext, setProductContext] = useState<ProductContextInterface>(
-    {
-      productEvents: [],
-      isLoading: true,
-      addNewlyCreatedProductEvent: (productEvent: NostrEvent) => {
-        setProductContext((productContext) => {
-          const productEvents = [...productContext.productEvents, productEvent];
-          return {
-            productEvents: productEvents,
-            isLoading: false,
-            addNewlyCreatedProductEvent:
-              productContext.addNewlyCreatedProductEvent,
-            removeDeletedProductEvent: productContext.removeDeletedProductEvent,
-          };
-        });
-      },
-      removeDeletedProductEvent: (productId: string) => {
-        setProductContext((productContext) => {
-          const productEvents = [...productContext.productEvents].filter(
-            (event) => event.id !== productId
-          );
-          return {
-            productEvents: productEvents,
-            isLoading: false,
-            addNewlyCreatedProductEvent:
-              productContext.addNewlyCreatedProductEvent,
-            removeDeletedProductEvent: productContext.removeDeletedProductEvent,
-          };
-        });
-      },
-    }
-  );
+  // ProductContext → Zustand (useProductStore)
+  // ChatsContext → Zustand (useChatStore)
+  // Read product state for DynamicHead only
+  const productEvents = useProductStore((s) => s.productEvents);
 
   const [reviewsContext, setReviewsContext] = useState<ReviewsContextInterface>(
     {
@@ -188,92 +156,7 @@ function Shopstr({ props }: { props: AppProps }) {
     }
   );
 
-  const [chatsMap, setChatMap] = useState(new Map());
-  const [isChatLoading, setIsChatLoading] = useState(true);
-  const [newOrderIds, setNewOrderIds] = useState<Set<string>>(new Set());
-
-  const addNewlyCreatedMessageEvent = useCallback(
-    async (messageEvent: NostrMessageEvent, sent?: boolean) => {
-      const pubkey = await signer?.getPubKey();
-      const newChatsMap = new Map(chatsMap);
-      const eventWithReadStatus = {
-        ...messageEvent,
-        read: sent ? true : false,
-      };
-      let chatArray;
-      if (messageEvent.pubkey === pubkey) {
-        const recipientPubkey = messageEvent.tags.find(
-          (tag) => tag[0] === "p"
-        )?.[1];
-        if (recipientPubkey) {
-          chatArray = newChatsMap.get(recipientPubkey) || [];
-          if (sent) {
-            chatArray.push(eventWithReadStatus);
-          } else {
-            chatArray = [eventWithReadStatus, ...chatArray];
-          }
-          newChatsMap.set(recipientPubkey, chatArray);
-        }
-      } else {
-        chatArray = newChatsMap.get(messageEvent.pubkey) || [];
-        if (sent) {
-          chatArray.push(eventWithReadStatus);
-        } else {
-          chatArray = [eventWithReadStatus, ...chatArray];
-        }
-        newChatsMap.set(messageEvent.pubkey, chatArray);
-      }
-      setChatMap(newChatsMap);
-      setIsChatLoading(false);
-    },
-    [chatsMap, signer]
-  );
-
-  const markAllMessagesAsRead = useCallback(async (): Promise<string[]> => {
-    const unreadMessageIds: string[] = [];
-    const wrappedEventIds: string[] = [];
-
-    for (const [_, messages] of chatsMap) {
-      for (const message of messages as NostrMessageEvent[]) {
-        if (!message.read) {
-          unreadMessageIds.push(message.id);
-          if (message.wrappedEventId) {
-            wrappedEventIds.push(message.wrappedEventId);
-          }
-        }
-      }
-    }
-
-    if (unreadMessageIds.length > 0) {
-      try {
-        const idsForDb =
-          wrappedEventIds.length > 0 ? wrappedEventIds : unreadMessageIds;
-        await fetch("/api/db/mark-messages-read", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messageIds: idsForDb }),
-        });
-
-        setNewOrderIds(new Set(unreadMessageIds));
-
-        const newChatsMap = new Map(chatsMap);
-        for (const [pubkey, messages] of newChatsMap) {
-          const updatedMessages = (messages as NostrMessageEvent[]).map(
-            (msg) => ({
-              ...msg,
-              read: true,
-            })
-          );
-          newChatsMap.set(pubkey, updatedMessages);
-        }
-        setChatMap(newChatsMap);
-      } catch (error) {
-        console.error("Failed to mark messages as read:", error);
-      }
-    }
-
-    return unreadMessageIds;
-  }, [chatsMap]);
+  // Chat state is now in useChatStore — no local state needed here
 
   const [followsContext, setFollowsContext] = useState<FollowsContextInterface>(
     {
@@ -326,14 +209,7 @@ function Shopstr({ props }: { props: AppProps }) {
     productEvents: NostrEvent[],
     isLoading: boolean
   ) => {
-    setProductContext((productContext) => {
-      return {
-        productEvents: productEvents,
-        isLoading: isLoading,
-        addNewlyCreatedProductEvent: productContext.addNewlyCreatedProductEvent,
-        removeDeletedProductEvent: productContext.removeDeletedProductEvent,
-      };
-    });
+    useProductStore.getState().setProducts(productEvents, isLoading);
   };
 
   const editReviewsContext = (
@@ -402,9 +278,8 @@ function Shopstr({ props }: { props: AppProps }) {
     });
   };
 
-  const editChatContext = (chatsMap: ChatsMap, isLoading: boolean) => {
-    setChatMap(chatsMap);
-    setIsChatLoading(isLoading);
+  const editChatContext = (chatsMap: Map<string, any>, isLoading: boolean) => {
+    useChatStore.getState().setChats(chatsMap, isLoading);
   };
 
   const editFollowsContext = (
@@ -711,7 +586,7 @@ function Shopstr({ props }: { props: AppProps }) {
   return (
     <>
       <DynamicHead
-        productEvents={productContext.productEvents}
+        productEvents={productEvents}
         shopEvents={shopContext.shopData}
         profileData={profileContext.profileData}
         ssrOgMeta={pageProps.ogMeta ?? null}
@@ -722,51 +597,36 @@ function Shopstr({ props }: { props: AppProps }) {
           <BlossomContext.Provider value={blossomContext}>
             <CashuWalletContext.Provider value={cashuWalletContext}>
               <FollowsContext.Provider value={followsContext}>
-                <ProductContext.Provider value={productContext}>
-                  <ReviewsContext.Provider value={reviewsContext}>
-                    <ProfileMapContext.Provider value={profileContext}>
-                      <ShopMapContext.Provider value={shopContext}>
-                        <ChatsContext.Provider
-                          value={
-                            {
-                              chatsMap: chatsMap,
-                              isLoading: isChatLoading,
-                              addNewlyCreatedMessageEvent:
-                                addNewlyCreatedMessageEvent,
-                              markAllMessagesAsRead: markAllMessagesAsRead,
-                              newOrderIds: newOrderIds,
-                            } as ChatsContextInterface
-                          }
-                        >
-                          {![
-                            "/",
-                            "/about",
-                            "/contact",
-                            "/faq",
-                            "/terms",
-                            "/privacy",
-                          ].includes(router.pathname) && (
-                            <TopNav
-                              setFocusedPubkey={setFocusedPubkey}
-                              setSelectedSection={setSelectedSection}
-                            />
-                          )}
-                          <div className="flex">
-                            <main className="flex-1">
-                              <Component
-                                {...pageProps}
-                                focusedPubkey={focusedPubkey}
-                                setFocusedPubkey={setFocusedPubkey}
-                                selectedSection={selectedSection}
-                                setSelectedSection={setSelectedSection}
-                              />
-                            </main>
-                          </div>
-                        </ChatsContext.Provider>
-                      </ShopMapContext.Provider>
-                    </ProfileMapContext.Provider>
-                  </ReviewsContext.Provider>
-                </ProductContext.Provider>
+                <ReviewsContext.Provider value={reviewsContext}>
+                  <ProfileMapContext.Provider value={profileContext}>
+                    <ShopMapContext.Provider value={shopContext}>
+                      {![
+                        "/",
+                        "/about",
+                        "/contact",
+                        "/faq",
+                        "/terms",
+                        "/privacy",
+                      ].includes(router.pathname) && (
+                        <TopNav
+                          setFocusedPubkey={setFocusedPubkey}
+                          setSelectedSection={setSelectedSection}
+                        />
+                      )}
+                      <div className="flex">
+                        <main className="flex-1">
+                          <Component
+                            {...pageProps}
+                            focusedPubkey={focusedPubkey}
+                            setFocusedPubkey={setFocusedPubkey}
+                            selectedSection={selectedSection}
+                            setSelectedSection={setSelectedSection}
+                          />
+                        </main>
+                      </div>
+                    </ShopMapContext.Provider>
+                  </ProfileMapContext.Provider>
+                </ReviewsContext.Provider>
               </FollowsContext.Provider>
             </CashuWalletContext.Provider>
           </BlossomContext.Provider>

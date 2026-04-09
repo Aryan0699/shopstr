@@ -3,7 +3,8 @@ import useNavigation from "@/components/hooks/use-navigation";
 import { Button, Image, useDisclosure } from "@nextui-org/react";
 import { Bars4Icon } from "@heroicons/react/24/outline";
 import { countNumberOfUnreadMessagesFromChatsContext } from "@/utils/messages/utils";
-import { ChatsContext, ShopMapContext } from "@/utils/context/context";
+import { ShopMapContext } from "@/utils/context/context";
+import { useChatStore } from "@/utils/store/chat-store";
 import { SignerContext } from "@/components/utility-components/nostr-context-provider";
 import { useRouter } from "next/router";
 import SignInModal from "./sign-in/SignInModal";
@@ -29,7 +30,7 @@ const TopNav = ({
   } = useNavigation();
   const router = useRouter();
 
-  const chatsContext = useContext(ChatsContext);
+  const chatsMap = useChatStore((s) => s.chatsMap);
   const shopMapContext = useContext(ShopMapContext);
 
   const [unreadMsgCount, setUnreadMsgCount] = useState(0);
@@ -68,12 +69,12 @@ const TopNav = ({
   useEffect(() => {
     const getUnreadMessages = async () => {
       const unreadMsgCount = await countNumberOfUnreadMessagesFromChatsContext(
-        chatsContext.chatsMap
+        chatsMap
       );
       setUnreadMsgCount(unreadMsgCount);
     };
     getUnreadMessages();
-  }, [chatsContext]);
+  }, [chatsMap]);
 
   useEffect(() => {
     const npub = router.pathname

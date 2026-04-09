@@ -14,7 +14,8 @@ import {
   XCircleIcon,
 } from "@heroicons/react/24/outline";
 import { useTheme } from "next-themes";
-import { ProfileMapContext, ChatsContext } from "../../utils/context/context";
+import { ProfileMapContext } from "../../utils/context/context";
+import { useChatStore } from "@/utils/store/chat-store";
 import {
   generateKeys,
   getLocalStorageData,
@@ -44,7 +45,6 @@ import {
 export default function ClaimButton({ token }: { token: string }) {
   const [lnurl, setLnurl] = useState("");
   const profileContext = useContext(ProfileMapContext);
-  const chatsContext = useContext(ChatsContext);
   const { signer, pubkey: userPubkey } = useContext(SignerContext);
   const { nostr } = useContext(NostrContext);
 
@@ -296,12 +296,13 @@ export default function ClaimButton({ token }: { token: string }) {
               userPubkey!
             );
             await sendGiftWrappedMessageEvent(nostr!, giftWrappedEvent);
-            chatsContext.addNewlyCreatedMessageEvent(
+            useChatStore.getState().addNewlyCreatedMessageEvent(
               {
                 ...giftWrappedMessageEvent,
                 sig: "",
                 read: false,
               },
+              signer,
               true
             );
           }

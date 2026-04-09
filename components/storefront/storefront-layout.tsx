@@ -9,11 +9,11 @@ import {
 } from "@heroicons/react/24/outline";
 import {
   ShopMapContext,
-  ProductContext,
   ProfileMapContext,
   ReviewsContext,
   CommunityContext,
 } from "@/utils/context/context";
+import { useProductStore } from "@/utils/store/product-store";
 import { SignerContext } from "@/components/utility-components/nostr-context-provider";
 import { ProfileWithDropdown } from "@/components/utility-components/profile/profile-dropdown";
 import SignInModal from "@/components/sign-in/SignInModal";
@@ -67,7 +67,7 @@ export default function StorefrontLayout({
   initialCreatedAt = 0,
 }: StorefrontLayoutProps) {
   const shopMapContext = useContext(ShopMapContext);
-  const productContext = useContext(ProductContext);
+  const productEvents = useProductStore((s) => s.productEvents);
   const profileContext = useContext(ProfileMapContext);
   const reviewsContext = useContext(ReviewsContext);
   const communityContext = useContext(CommunityContext);
@@ -185,12 +185,12 @@ export default function StorefrontLayout({
   }, []);
 
   const sellerProducts = useMemo(() => {
-    if (!shopPubkey || !productContext.productEvents.length) return [];
-    return productContext.productEvents
+    if (!shopPubkey || !productEvents.length) return [];
+    return productEvents
       .filter((event: any) => event.pubkey === shopPubkey)
       .map((event: any) => parseTags(event))
       .filter((p: ProductData | undefined) => p !== undefined) as ProductData[];
-  }, [shopPubkey, productContext.productEvents]);
+  }, [shopPubkey, productEvents]);
 
   const profile = profileContext.profileData.get(shopPubkey);
   const shopName = shop?.content?.name || profile?.content?.name || "Shop";

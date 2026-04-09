@@ -31,9 +31,9 @@ import {
 } from "@heroicons/react/24/outline";
 import {
   ReviewsContext,
-  ProductContext,
   ShopMapContext,
 } from "@/utils/context/context";
+import { useProductStore } from "@/utils/store/product-store";
 import FreeShippingNotification from "../free-shipping-notification";
 import FailureModal from "../utility-components/failure-modal";
 import SuccessModal from "../utility-components/success-modal";
@@ -86,7 +86,7 @@ export default function CheckoutCard({
   rawEvent?: Event;
 }) {
   const { pubkey: userPubkey, isLoggedIn } = useContext(SignerContext);
-  const productEventContext = useContext(ProductContext);
+  const productEvents = useProductStore((s) => s.productEvents);
   const shopMapContext = useContext(ShopMapContext);
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [showFreeShippingNotification, setShowFreeShippingNotification] =
@@ -387,7 +387,7 @@ export default function CheckoutCard({
   };
 
   const handleShare = async () => {
-    const allParsed = productEventContext.productEvents
+    const allParsed = productEvents
       .filter((e: Event) => e.kind !== 1)
       .map((e: Event) => parseTags(e))
       .filter((p: ProductData | undefined): p is ProductData => !!p);

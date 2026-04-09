@@ -1,9 +1,9 @@
 import { useContext, useState, useEffect, useMemo, useRef } from "react";
 import {
   CashuWalletContext,
-  ChatsContext,
   ProfileMapContext,
 } from "../utils/context/context";
+import { useChatStore } from "@/utils/store/chat-store";
 import { useForm } from "react-hook-form";
 import {
   Button,
@@ -102,7 +102,6 @@ export default function CartInvoiceCard({
 
   // Check if there are tokens available for Cashu payment
   const hasTokensAvailable = tokens && tokens.length > 0;
-  const chatsContext = useContext(ChatsContext);
   const profileContext = useContext(ProfileMapContext);
 
   const { nostr } = useContext(NostrContext);
@@ -339,12 +338,13 @@ export default function CartInvoiceCard({
       await sendGiftWrappedMessageEvent(nostr, giftWrappedEventForBuyer);
 
       // Add to local context for immediate UI feedback
-      chatsContext.addNewlyCreatedMessageEvent(
+      useChatStore.getState().addNewlyCreatedMessageEvent(
         {
           ...giftWrappedMessageEventForBuyer,
           sig: "",
           read: false,
         },
+        signer,
         true
       );
     } catch (error) {
@@ -716,12 +716,13 @@ export default function CartInvoiceCard({
     await sendGiftWrappedMessageEvent(nostr!, giftWrappedEvent);
 
     if (isReceipt) {
-      chatsContext.addNewlyCreatedMessageEvent(
+      useChatStore.getState().addNewlyCreatedMessageEvent(
         {
           ...giftWrappedMessageEvent,
           sig: "",
           read: false,
         },
+        signer,
         true
       );
     }

@@ -17,10 +17,10 @@ import {
   HandThumbDownIcon,
 } from "@heroicons/react/24/outline";
 import {
-  ChatsContext,
-  ProductContext,
   ReviewsContext,
 } from "../../utils/context/context";
+import { useChatStore } from "@/utils/store/chat-store";
+import { useProductStore } from "@/utils/store/product-store";
 import { NostrMessageEvent } from "../../utils/types/types";
 import ShopstrSpinner from "../utility-components/shopstr-spinner";
 import FailureModal from "../utility-components/failure-modal";
@@ -105,8 +105,11 @@ interface OrderData {
 }
 
 const OrdersDashboard = () => {
-  const chatsContext = useContext(ChatsContext);
-  const productContext = useContext(ProductContext);
+  const chatsMap = useChatStore((s) => s.chatsMap);
+  const chatsIsLoading = useChatStore((s) => s.isLoading);
+  const markAllMessagesAsRead = useChatStore((s) => s.markAllMessagesAsRead);
+  const newOrderIds = useChatStore((s) => s.newOrderIds);
+  const productEvents = useProductStore((s) => s.productEvents);
   const [orders, setOrders] = useState<OrderData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [totalOrders, setTotalOrders] = useState(0);
@@ -271,16 +274,16 @@ const OrdersDashboard = () => {
   }, []);
 
   useEffect(() => {
-    if (!chatsContext || chatsContext.isLoading) return;
-    chatsContext.markAllMessagesAsRead();
-  }, [chatsContext?.isLoading]);
+    if (chatsIsLoading) return;
+    markAllMessagesAsRead();
+  }, [chatsIsLoading]);
 
   useEffect(() => {
     async function loadCachedStatuses() {
-      if (!chatsContext || chatsContext.isLoading) return;
+      if (chatsIsLoading) return;
 
       const orderIds: string[] = [];
-      for (const entry of chatsContext.chatsMap) {
+      for (const entry of chatsMap) {
         const chat = entry[1] as NostrMessageEvent[];
         for (const messageEvent of chat) {
           const tagsMap = new Map(
@@ -319,17 +322,17 @@ const OrdersDashboard = () => {
     }
 
     loadCachedStatuses();
-  }, [chatsContext?.isLoading, chatsContext?.chatsMap]);
+  }, [chatsIsLoading, chatsMap]);
 
   useEffect(() => {
     async function loadOrders() {
-      if (!chatsContext || chatsContext.isLoading) {
+      if (chatsIsLoading) {
         return;
       }
 
       const ordersList: OrderData[] = [];
 
-      for (const entry of chatsContext.chatsMap) {
+      for (const entry of chatsMap) {
         const chat = entry[1] as NostrMessageEvent[];
 
         for (const messageEvent of chat) {
@@ -422,8 +425,8 @@ const OrdersDashboard = () => {
             if (merchantPubkey && merchantPubkey === userPubkey) {
               isSale = true;
             }
-            if (productAddress && productContext?.productEvents) {
-              const productEvent = productContext.productEvents.find(
+            if (productAddress && productEvents) {
+              const productEvent = productEvents.find(
                 (event: any) => {
                   const eventAddress = `30402:${event.pubkey}:${event.tags.find(
                     (tag: any) => tag[0] === "d"
@@ -599,7 +602,7 @@ const OrdersDashboard = () => {
 
       const returnRequestOrderIds = new Set<string>();
       const returnRequestTypes = new Map<string, string>();
-      for (const entry of chatsContext.chatsMap) {
+      for (const entry of chatsMap) {
         const chat = entry[1] as NostrMessageEvent[];
         for (const messageEvent of chat) {
           const tagsMap = new Map(
@@ -665,7 +668,7 @@ const OrdersDashboard = () => {
     }
 
     loadOrders();
-  }, [chatsContext, productContext, cachedStatuses]);
+  }, [chatsMap, chatsIsLoading, productEvents, cachedStatuses]);
 
   const convertToSats = (amount: number, currency: string): number => {
     const curr = currency?.toLowerCase() || "sats";
@@ -775,9 +778,9 @@ const OrdersDashboard = () => {
   };
 
   const handleProductClick = (productAddress: string) => {
-    if (!productContext?.productEvents) return;
+    if (!productEvents) return;
 
-    const productEvent = productContext.productEvents.find((event: any) => {
+    const productEvent = productEvents.find((event: any) => {
       const eventAddress = `30402:${event.pubkey}:${event.tags.find(
         (tag: any) => tag[0] === "d"
       )?.[1]}`;
@@ -1270,7 +1273,7 @@ const OrdersDashboard = () => {
     }
   };
 
-  if (isLoading || !chatsContext || chatsContext.isLoading) {
+  if (isLoading || chatsIsLoading) {
     return (
       <div className="flex h-[66vh] items-center justify-center">
         <ShopstrSpinner />
@@ -1416,7 +1419,7 @@ const OrdersDashboard = () => {
                   </tr>
                 ) : (
                   orders.map((order) => {
-                    const isNewOrder = chatsContext.newOrderIds.has(
+                    const isNewOrder = newOrderIds.has(
                       order.messageEvent.id
                     );
                     return (

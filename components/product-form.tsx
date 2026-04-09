@@ -39,7 +39,8 @@ import {
 } from "@/utils/nostr/nostr-helper-functions";
 import LocationDropdown from "./utility-components/dropdowns/location-dropdown";
 import ConfirmActionDropdown from "./utility-components/dropdowns/confirm-action-dropdown";
-import { ProductContext, ProfileMapContext } from "../utils/context/context";
+import { ProfileMapContext } from "../utils/context/context";
+import { useProductStore } from "@/utils/store/product-store";
 import { ProductData } from "@/utils/parsers/product-parser-functions";
 import { buildSrcSet } from "@/utils/images";
 import { FileUploaderButton } from "./utility-components/file-uploader";
@@ -78,7 +79,9 @@ export default function ProductForm({
     useState(false);
   const [showOptionalTags, setShowOptionalTags] = useState(false);
   const [isFlashSale, setIsFlashSale] = useState(false);
-  const productEventContext = useContext(ProductContext);
+  const addNewlyCreatedProductEvent = useProductStore(
+    (s) => s.addNewlyCreatedProductEvent
+  );
   const profileContext = useContext(ProfileMapContext);
   const {
     signer,
@@ -321,7 +324,7 @@ export default function ProductForm({
     }
 
     clear();
-    productEventContext.addNewlyCreatedProductEvent(newListing);
+    addNewlyCreatedProductEvent(newListing);
     setIsPostingOrUpdatingProduct(false);
     if (onSubmitCallback) {
       onSubmitCallback();

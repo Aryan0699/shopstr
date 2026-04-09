@@ -1,4 +1,4 @@
-import { useEffect, useState, useContext } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { Button } from "@nextui-org/react";
 import StorefrontThemeWrapper from "@/components/storefront/storefront-theme-wrapper";
@@ -9,7 +9,7 @@ import {
   ChatBubbleLeftRightIcon,
 } from "@heroicons/react/24/outline";
 import { nip19 } from "nostr-tools";
-import { ProductContext } from "@/utils/context/context";
+import { useProductStore } from "@/utils/store/product-store";
 import parseTags, {
   ProductData,
 } from "@/utils/parsers/product-parser-functions";
@@ -57,7 +57,8 @@ export default function OrderSummary() {
   const [latestProducts, setLatestProducts] = useState<ProductData[]>([]);
   const [sfSellerPubkey, setSfSellerPubkey] = useState("");
   const [sfShopSlug, setSfShopSlug] = useState("");
-  const productContext = useContext(ProductContext);
+  const productEvents = useProductStore((s) => s.productEvents);
+  const isProductLoading = useProductStore((s) => s.isLoading);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -91,9 +92,9 @@ export default function OrderSummary() {
   }, [router]);
 
   useEffect(() => {
-    if (!productContext.isLoading && productContext.productEvents) {
+    if (!isProductLoading && productEvents) {
       const products: ProductData[] = [];
-      for (const event of productContext.productEvents) {
+      for (const event of productEvents) {
         try {
           const parsed = parseTags(event);
           if (parsed && parsed.title && parsed.images.length > 0) {
@@ -112,7 +113,7 @@ export default function OrderSummary() {
       const shuffled = products.slice(0, 4);
       setLatestProducts(shuffled);
     }
-  }, [productContext.isLoading, productContext.productEvents, orderData]);
+  }, [isProductLoading, productEvents, orderData]);
 
   const formatPaymentMethod = (method: string) => {
     const methods: Record<string, string> = {

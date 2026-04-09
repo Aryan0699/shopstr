@@ -31,7 +31,6 @@ import {
 } from "@heroicons/react/24/outline";
 import {
   ReviewsContext,
-  ProductContext,
   ShopMapContext,
 } from "@/utils/context/context";
 import FreeShippingNotification from "../free-shipping-notification";
@@ -46,6 +45,7 @@ import BulkSelector from "./bulk-selector";
 import ZapsnagButton from "@/components/ZapsnagButton";
 import { RawEventModal, EventIdModal } from "./modals/event-modals";
 import { getLocalStorageJson } from "@/utils/safe-json";
+import { useProductStore } from "@/utils/store/product-store";
 
 const SUMMARY_CHARACTER_LIMIT = 100;
 type CartDiscountsMap = Record<string, { code: string; percentage: number }>;
@@ -86,7 +86,7 @@ export default function CheckoutCard({
   rawEvent?: Event;
 }) {
   const { pubkey: userPubkey, isLoggedIn } = useContext(SignerContext);
-  const productEventContext = useContext(ProductContext);
+  const productEvents = useProductStore((state) => state.productEvents);
   const shopMapContext = useContext(ShopMapContext);
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [showFreeShippingNotification, setShowFreeShippingNotification] =
@@ -387,7 +387,7 @@ export default function CheckoutCard({
   };
 
   const handleShare = async () => {
-    const allParsed = productEventContext.productEvents
+    const allParsed = productEvents
       .filter((e: Event) => e.kind !== 1)
       .map((e: Event) => parseTags(e))
       .filter((p: ProductData | undefined): p is ProductData => !!p);

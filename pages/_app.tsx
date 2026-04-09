@@ -8,8 +8,6 @@ import {
   ProfileContextInterface,
   ShopMapContext,
   ShopContextInterface,
-  ProductContext,
-  ProductContextInterface,
   ChatsContextInterface,
   ChatsContext,
   ChatsMap,
@@ -64,44 +62,14 @@ import {
 } from "@/components/utility-components/nostr-context-provider";
 import { retryFailedRelayPublishes } from "@/utils/nostr/retry-service";
 import { NostrManager } from "@/utils/nostr/nostr-manager";
+import { useProductStore } from "@/utils/store/product-store";
 
 function Shopstr({ props }: { props: AppProps }) {
   const { Component, pageProps } = props;
   const { nostr } = useContext(NostrContext);
   const { signer, isLoggedIn } = useContext(SignerContext);
-
-  const [productContext, setProductContext] = useState<ProductContextInterface>(
-    {
-      productEvents: [],
-      isLoading: true,
-      addNewlyCreatedProductEvent: (productEvent: NostrEvent) => {
-        setProductContext((productContext) => {
-          const productEvents = [...productContext.productEvents, productEvent];
-          return {
-            productEvents: productEvents,
-            isLoading: false,
-            addNewlyCreatedProductEvent:
-              productContext.addNewlyCreatedProductEvent,
-            removeDeletedProductEvent: productContext.removeDeletedProductEvent,
-          };
-        });
-      },
-      removeDeletedProductEvent: (productId: string) => {
-        setProductContext((productContext) => {
-          const productEvents = [...productContext.productEvents].filter(
-            (event) => event.id !== productId
-          );
-          return {
-            productEvents: productEvents,
-            isLoading: false,
-            addNewlyCreatedProductEvent:
-              productContext.addNewlyCreatedProductEvent,
-            removeDeletedProductEvent: productContext.removeDeletedProductEvent,
-          };
-        });
-      },
-    }
-  );
+  const productEvents = useProductStore((state) => state.productEvents);
+  const setProductState = useProductStore((state) => state.setProductState);
 
   const [reviewsContext, setReviewsContext] = useState<ReviewsContextInterface>(
     {
@@ -326,14 +294,7 @@ function Shopstr({ props }: { props: AppProps }) {
     productEvents: NostrEvent[],
     isLoading: boolean
   ) => {
-    setProductContext((productContext) => {
-      return {
-        productEvents: productEvents,
-        isLoading: isLoading,
-        addNewlyCreatedProductEvent: productContext.addNewlyCreatedProductEvent,
-        removeDeletedProductEvent: productContext.removeDeletedProductEvent,
-      };
-    });
+    setProductState(productEvents, isLoading);
   };
 
   const editReviewsContext = (
@@ -711,7 +672,7 @@ function Shopstr({ props }: { props: AppProps }) {
   return (
     <>
       <DynamicHead
-        productEvents={productContext.productEvents}
+        productEvents={productEvents}
         shopEvents={shopContext.shopData}
         profileData={profileContext.profileData}
         ssrOgMeta={pageProps.ogMeta ?? null}
@@ -722,51 +683,49 @@ function Shopstr({ props }: { props: AppProps }) {
           <BlossomContext.Provider value={blossomContext}>
             <CashuWalletContext.Provider value={cashuWalletContext}>
               <FollowsContext.Provider value={followsContext}>
-                <ProductContext.Provider value={productContext}>
-                  <ReviewsContext.Provider value={reviewsContext}>
-                    <ProfileMapContext.Provider value={profileContext}>
-                      <ShopMapContext.Provider value={shopContext}>
-                        <ChatsContext.Provider
-                          value={
-                            {
-                              chatsMap: chatsMap,
-                              isLoading: isChatLoading,
-                              addNewlyCreatedMessageEvent:
-                                addNewlyCreatedMessageEvent,
-                              markAllMessagesAsRead: markAllMessagesAsRead,
-                              newOrderIds: newOrderIds,
-                            } as ChatsContextInterface
-                          }
-                        >
-                          {![
-                            "/",
-                            "/about",
-                            "/contact",
-                            "/faq",
-                            "/terms",
-                            "/privacy",
-                          ].includes(router.pathname) && (
-                            <TopNav
+                <ReviewsContext.Provider value={reviewsContext}>
+                  <ProfileMapContext.Provider value={profileContext}>
+                    <ShopMapContext.Provider value={shopContext}>
+                      <ChatsContext.Provider
+                        value={
+                          {
+                            chatsMap: chatsMap,
+                            isLoading: isChatLoading,
+                            addNewlyCreatedMessageEvent:
+                              addNewlyCreatedMessageEvent,
+                            markAllMessagesAsRead: markAllMessagesAsRead,
+                            newOrderIds: newOrderIds,
+                          } as ChatsContextInterface
+                        }
+                      >
+                        {![
+                          "/",
+                          "/about",
+                          "/contact",
+                          "/faq",
+                          "/terms",
+                          "/privacy",
+                        ].includes(router.pathname) && (
+                          <TopNav
+                            setFocusedPubkey={setFocusedPubkey}
+                            setSelectedSection={setSelectedSection}
+                          />
+                        )}
+                        <div className="flex">
+                          <main className="flex-1">
+                            <Component
+                              {...pageProps}
+                              focusedPubkey={focusedPubkey}
                               setFocusedPubkey={setFocusedPubkey}
+                              selectedSection={selectedSection}
                               setSelectedSection={setSelectedSection}
                             />
-                          )}
-                          <div className="flex">
-                            <main className="flex-1">
-                              <Component
-                                {...pageProps}
-                                focusedPubkey={focusedPubkey}
-                                setFocusedPubkey={setFocusedPubkey}
-                                selectedSection={selectedSection}
-                                setSelectedSection={setSelectedSection}
-                              />
-                            </main>
-                          </div>
-                        </ChatsContext.Provider>
-                      </ShopMapContext.Provider>
-                    </ProfileMapContext.Provider>
-                  </ReviewsContext.Provider>
-                </ProductContext.Provider>
+                          </main>
+                        </div>
+                      </ChatsContext.Provider>
+                    </ShopMapContext.Provider>
+                  </ProfileMapContext.Provider>
+                </ReviewsContext.Provider>
               </FollowsContext.Provider>
             </CashuWalletContext.Provider>
           </BlossomContext.Provider>

@@ -7,12 +7,12 @@ import {
 } from "@heroicons/react/24/outline";
 import { StorefrontColorScheme } from "@/utils/types/types";
 import { SignerContext } from "@/components/utility-components/nostr-context-provider";
-import { ProductContext } from "@/utils/context/context";
 import parseTags, {
   ProductData,
 } from "@/utils/parsers/product-parser-functions";
 import { nip19 } from "nostr-tools";
 import ProductCard from "@/components/utility-components/product-card";
+import { useProductStore } from "@/utils/store/product-store";
 
 interface OrderSummaryData {
   productTitle: string;
@@ -65,7 +65,7 @@ export default function StorefrontOrderConfirmation({
 }: StorefrontOrderConfirmationProps) {
   const router = useRouter();
   const { isLoggedIn } = useContext(SignerContext);
-  const productContext = useContext(ProductContext);
+  const productEvents = useProductStore((state) => state.productEvents);
   const [orderData, setOrderData] = useState<OrderSummaryData | null>(null);
 
   useEffect(() => {
@@ -82,9 +82,9 @@ export default function StorefrontOrderConfirmation({
   }, [router, shopSlug]);
 
   const sellerProducts = useMemo(() => {
-    if (!productContext.productEvents) return [];
+    if (!productEvents) return [];
     const products: ProductData[] = [];
-    for (const event of productContext.productEvents) {
+    for (const event of productEvents) {
       try {
         const parsed = parseTags(event);
         if (
@@ -106,7 +106,7 @@ export default function StorefrontOrderConfirmation({
       products[j] = current;
     }
     return products.slice(0, 4);
-  }, [productContext.productEvents, shopPubkey]);
+  }, [productEvents, shopPubkey]);
 
   const formatPaymentMethod = (method: string) => {
     const methods: Record<string, string> = {

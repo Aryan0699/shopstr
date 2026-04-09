@@ -18,7 +18,6 @@ import {
 } from "@heroicons/react/24/outline";
 import {
   ChatsContext,
-  ProductContext,
   ReviewsContext,
 } from "../../utils/context/context";
 import { NostrMessageEvent } from "../../utils/types/types";
@@ -58,6 +57,7 @@ import {
   Legend,
 } from "chart.js";
 import { Line } from "react-chartjs-2";
+import { useProductStore } from "@/utils/store/product-store";
 
 ChartJS.register(
   CategoryScale,
@@ -106,7 +106,7 @@ interface OrderData {
 
 const OrdersDashboard = () => {
   const chatsContext = useContext(ChatsContext);
-  const productContext = useContext(ProductContext);
+  const productEvents = useProductStore((state) => state.productEvents);
   const [orders, setOrders] = useState<OrderData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [totalOrders, setTotalOrders] = useState(0);
@@ -422,8 +422,8 @@ const OrdersDashboard = () => {
             if (merchantPubkey && merchantPubkey === userPubkey) {
               isSale = true;
             }
-            if (productAddress && productContext?.productEvents) {
-              const productEvent = productContext.productEvents.find(
+            if (productAddress && productEvents) {
+              const productEvent = productEvents.find(
                 (event: any) => {
                   const eventAddress = `30402:${event.pubkey}:${event.tags.find(
                     (tag: any) => tag[0] === "d"
@@ -665,7 +665,7 @@ const OrdersDashboard = () => {
     }
 
     loadOrders();
-  }, [chatsContext, productContext, cachedStatuses]);
+  }, [chatsContext, productEvents, cachedStatuses]);
 
   const convertToSats = (amount: number, currency: string): number => {
     const curr = currency?.toLowerCase() || "sats";
@@ -775,9 +775,9 @@ const OrdersDashboard = () => {
   };
 
   const handleProductClick = (productAddress: string) => {
-    if (!productContext?.productEvents) return;
+    if (!productEvents) return;
 
-    const productEvent = productContext.productEvents.find((event: any) => {
+    const productEvent = productEvents.find((event: any) => {
       const eventAddress = `30402:${event.pubkey}:${event.tags.find(
         (tag: any) => tag[0] === "d"
       )?.[1]}`;

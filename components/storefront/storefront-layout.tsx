@@ -9,7 +9,6 @@ import {
 } from "@heroicons/react/24/outline";
 import {
   ShopMapContext,
-  ProductContext,
   ProfileMapContext,
   ReviewsContext,
   CommunityContext,
@@ -42,6 +41,7 @@ import StorefrontWallet from "./storefront-wallet";
 import StorefrontMyListings from "./storefront-my-listings";
 import StorefrontOrderConfirmation from "./storefront-order-confirmation";
 import StorefrontPolicyPage from "./storefront-policy-page";
+import { useProductStore } from "@/utils/store/product-store";
 
 const DEFAULT_COLORS: StorefrontColorScheme = {
   primary: "#a438ba",
@@ -67,7 +67,7 @@ export default function StorefrontLayout({
   initialCreatedAt = 0,
 }: StorefrontLayoutProps) {
   const shopMapContext = useContext(ShopMapContext);
-  const productContext = useContext(ProductContext);
+  const productEvents = useProductStore((state) => state.productEvents);
   const profileContext = useContext(ProfileMapContext);
   const reviewsContext = useContext(ReviewsContext);
   const communityContext = useContext(CommunityContext);
@@ -185,12 +185,12 @@ export default function StorefrontLayout({
   }, []);
 
   const sellerProducts = useMemo(() => {
-    if (!shopPubkey || !productContext.productEvents.length) return [];
-    return productContext.productEvents
+    if (!shopPubkey || !productEvents.length) return [];
+    return productEvents
       .filter((event: any) => event.pubkey === shopPubkey)
       .map((event: any) => parseTags(event))
       .filter((p: ProductData | undefined) => p !== undefined) as ProductData[];
-  }, [shopPubkey, productContext.productEvents]);
+  }, [shopPubkey, productEvents]);
 
   const profile = profileContext.profileData.get(shopPubkey);
   const shopName = shop?.content?.name || profile?.content?.name || "Shop";

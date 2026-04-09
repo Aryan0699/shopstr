@@ -2,7 +2,7 @@ import { useState, useEffect, useContext } from "react";
 import { nip19 } from "nostr-tools";
 import { deleteEvent } from "@/utils/nostr/nostr-helper-functions";
 import { NostrEvent } from "../utils/types/types";
-import { ProductContext, FollowsContext } from "../utils/context/context";
+import { FollowsContext } from "../utils/context/context";
 import ProductCard from "./utility-components/product-card";
 import DisplayProductModal from "./display-product-modal";
 import { SHOPSTRBUTTONCLASSNAMES } from "@/utils/STATIC-VARIABLES";
@@ -18,6 +18,7 @@ import {
   SignerContext,
 } from "@/components/utility-components/nostr-context-provider";
 import { getListingSlug } from "@/utils/url-slugs";
+import { useProductStore } from "@/utils/store/product-store";
 
 const escapeRegExp = (value: string) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -45,7 +46,11 @@ const DisplayProducts = ({
 }) => {
   const [productEvents, setProductEvents] = useState<ProductData[]>([]);
   const [isProductsLoading, setIsProductLoading] = useState(true);
-  const productEventContext = useContext(ProductContext);
+  const allProductEvents = useProductStore((state) => state.productEvents);
+  const isProductContextLoading = useProductStore((state) => state.isLoading);
+  const removeDeletedProductEvent = useProductStore(
+    (state) => state.removeDeletedProductEvent
+  );
   const followsContext = useContext(FollowsContext);
   const [focusedProduct, setFocusedProduct] = useState<ProductData>();
   const [showModal, setShowModal] = useState(false);
@@ -79,10 +84,9 @@ const DisplayProducts = ({
   }, [focusedPubkey]);
 
   useEffect(() => {
-    if (!productEventContext) return;
-    if (!productEventContext.isLoading && productEventContext.productEvents) {
+    if (!isProductContextLoading && allProductEvents) {
       setIsProductLoading(true);
-      const sortedProductEvents = [...productEventContext.productEvents].sort(
+      const sortedProductEvents = [...allProductEvents].sort(
         (a: NostrEvent, b: NostrEvent) => b.created_at - a.created_at
       );
       const parsedProductData: ProductData[] = [];
@@ -116,11 +120,11 @@ const DisplayProducts = ({
       setProductEvents(parsedProductData);
       if (parsedProductData.length >= itemsPerPage) {
         setIsProductLoading(false);
-      } else if (!productEventContext.isLoading) {
+      } else if (!isProductContextLoading) {
         setIsProductLoading(false);
       }
     }
-  }, [productEventContext, wotFilter]);
+  }, [allProductEvents, isProductContextLoading, wotFilter]);
 
   useEffect(() => {
     if (focusedPubkey && setCategories) {
@@ -218,7 +222,7 @@ const DisplayProducts = ({
   const handleDelete = async (productId: string) => {
     try {
       await deleteEvent(nostr!, signer!, [productId]);
-      productEventContext.removeDeletedProductEvent(productId);
+      removeDeletedProductEvent(productId);
     } catch {
       return;
     }
@@ -237,7 +241,7 @@ const DisplayProducts = ({
       return `/listing/${product.id}`;
     }
 
-    const allParsed = productEventContext.productEvents
+    const allParsed = allProductEvents
       .filter((e: NostrEvent) => e.kind !== 1)
       .map((e: NostrEvent) => parseTags(e))
       .filter((p: ProductData | undefined): p is ProductData => !!p);

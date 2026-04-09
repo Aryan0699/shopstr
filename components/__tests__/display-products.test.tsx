@@ -2,13 +2,13 @@ import { render, screen, waitFor } from "@testing-library/react";
 import DisplayProducts from "../display-products";
 import {
   FollowsContext,
-  ProductContext,
   ProfileMapContext,
 } from "@/utils/context/context";
 import {
   NostrContext,
   SignerContext,
 } from "@/components/utility-components/nostr-context-provider";
+import { useProductStore } from "@/utils/store/product-store";
 
 jest.mock("next/router", () => ({
   __esModule: true,
@@ -42,7 +42,34 @@ jest.mock("@/utils/url-slugs", () => ({
 }));
 
 describe("DisplayProducts search filtering", () => {
+  beforeEach(() => {
+    useProductStore.setState({
+      productEvents: [],
+      isLoading: true,
+    });
+  });
+
   it("matches literal special characters in search queries", async () => {
+    useProductStore.setState({
+      productEvents: [
+        {
+          id: "product-1",
+          pubkey: "seller-pubkey",
+          created_at: 1,
+          kind: 30018,
+          tags: [
+            ["title", "C++ Guide"],
+            ["summary", "A beginner-friendly manual"],
+            ["price", "10", "USD"],
+            ["image", "https://example.com/guide.png"],
+          ],
+          content: "content",
+          sig: "sig",
+        },
+      ] as any,
+      isLoading: false,
+    });
+
     render(
       <SignerContext.Provider
         value={{ pubkey: "viewer-pubkey", isLoggedIn: true }}
@@ -62,35 +89,11 @@ describe("DisplayProducts search filtering", () => {
                 isLoading: false,
               }}
             >
-              <ProductContext.Provider
-                value={{
-                  productEvents: [
-                    {
-                      id: "product-1",
-                      pubkey: "seller-pubkey",
-                      created_at: 1,
-                      kind: 30018,
-                      tags: [
-                        ["title", "C++ Guide"],
-                        ["summary", "A beginner-friendly manual"],
-                        ["price", "10", "USD"],
-                        ["image", "https://example.com/guide.png"],
-                      ],
-                      content: "content",
-                      sig: "sig",
-                    },
-                  ],
-                  isLoading: false,
-                  addNewlyCreatedProductEvent: jest.fn(),
-                  removeDeletedProductEvent: jest.fn(),
-                }}
-              >
-                <DisplayProducts
-                  selectedCategories={new Set()}
-                  selectedLocation=""
-                  selectedSearch="c++"
-                />
-              </ProductContext.Provider>
+              <DisplayProducts
+                selectedCategories={new Set()}
+                selectedLocation=""
+                selectedSearch="c++"
+              />
             </FollowsContext.Provider>
           </ProfileMapContext.Provider>
         </NostrContext.Provider>

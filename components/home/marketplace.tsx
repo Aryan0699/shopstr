@@ -25,7 +25,6 @@ import {
   ReviewsContext,
   ShopMapContext,
   FollowsContext,
-  ProductContext,
   ProfileMapContext,
 } from "@/utils/context/context";
 import DisplayProducts from "../display-products";
@@ -51,6 +50,7 @@ import {
   isNpub,
 } from "@/utils/url-slugs";
 import { useDebounce } from "@/utils/hooks/useDebounce";
+import { useProductStore } from "@/utils/store/product-store";
 
 export function normalizeNpub(
   npub: string | string[] | undefined
@@ -117,7 +117,7 @@ function MarketplacePage({
   const reviewsContext = useContext(ReviewsContext);
   const shopMapContext = useContext(ShopMapContext);
   const followsContext = useContext(FollowsContext);
-  const productEventContext = useContext(ProductContext);
+  const productEvents = useProductStore((state) => state.productEvents);
   const profileMapContext = useContext(ProfileMapContext);
 
   const { pubkey: userPubkey, isLoggedIn: loggedIn } =
@@ -270,7 +270,7 @@ function MarketplacePage({
       return;
     }
 
-    const allParsed = productEventContext.productEvents
+    const allParsed = productEvents
       .filter((e: Event) => e.kind !== 1)
       .map((e: Event) => parseTags(e))
       .filter((p: ProductData | undefined): p is ProductData => !!p);

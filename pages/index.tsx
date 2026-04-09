@@ -12,7 +12,6 @@ import { useRouter } from "next/router";
 import { SHOPSTRBUTTONCLASSNAMES } from "@/utils/STATIC-VARIABLES";
 import { useContext, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { ProductContext } from "@/utils/context/context";
 import ProductCard from "@/components/utility-components/product-card";
 import parseTags, {
   ProductData,
@@ -21,12 +20,13 @@ import { SignerContext } from "@/components/utility-components/nostr-context-pro
 import Link from "next/link";
 import { nip19 } from "nostr-tools";
 import { NostrEvent } from "@/utils/types/types";
+import { useProductStore } from "@/utils/store/product-store";
 
 export default function Landing() {
   const router = useRouter();
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [isSellerFlow, setIsSellerFlow] = useState(false);
-  const productEventContext = useContext(ProductContext);
+  const productEvents = useProductStore((state) => state.productEvents);
 
   const [parsedProducts, setParsedProducts] = useState<ProductData[]>([]);
   const [listingCount, setListingCount] = useState<number | null>(null);
@@ -55,7 +55,7 @@ export default function Landing() {
 
   useEffect(() => {
     const parsedProductsArray: ProductData[] = [];
-    const products = productEventContext.productEvents;
+    const products = productEvents;
     products.forEach((product: NostrEvent) => {
       const parsedProduct = parseTags(product) as ProductData;
       if (
@@ -67,7 +67,7 @@ export default function Landing() {
       }
     });
     setParsedProducts(parsedProductsArray);
-  }, [productEventContext.productEvents]);
+  }, [productEvents]);
 
   return (
     <div className="min-h-screen w-full bg-light-bg bg-gradient-to-b from-light-bg to-light-fg dark:bg-dark-bg dark:from-dark-bg dark:to-dark-fg">

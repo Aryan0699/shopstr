@@ -26,9 +26,9 @@ import { SignerContext } from "@/components/utility-components/nostr-context-pro
 import parseTags, {
   ProductData,
 } from "@/utils/parsers/product-parser-functions";
-import { ProductContext } from "@/utils/context/context";
 import { getListingSlug } from "@/utils/url-slugs";
 import { NostrEvent } from "@/utils/types/types";
+import { useProductStore } from "@/utils/store/product-store";
 
 interface ProductModalProps {
   productData: ProductData;
@@ -44,7 +44,7 @@ export default function DisplayProductModal({
   handleDelete,
 }: ProductModalProps) {
   const { pubkey: userPubkey, isLoggedIn } = useContext(SignerContext);
-  const productEventContext = useContext(ProductContext);
+  const productEvents = useProductStore((state) => state.productEvents);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [showProductForm, setShowProductForm] = useState(false);
 
@@ -63,7 +63,7 @@ export default function DisplayProductModal({
   };
 
   const handleShare = async () => {
-    const allParsed = productEventContext.productEvents
+    const allParsed = productEvents
       .filter((e: NostrEvent) => e.kind !== 1)
       .map((e: NostrEvent) => parseTags(e))
       .filter((p: ProductData | undefined): p is ProductData => !!p);

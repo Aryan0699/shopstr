@@ -588,7 +588,7 @@ export default function CheckoutCard({
                         dropDownKeys={
                           productData.pubkey === userPubkey
                             ? ["shop_profile"]
-                            : ["shop", "inquiry", "copy_npub"]
+                            : ["shop", "inquiry", "follow", "copy_npub"]
                         }
                       />
                       {merchantQuality !== "" && (
@@ -911,7 +911,7 @@ export default function CheckoutCard({
                                 dropDownKeys={
                                   reviewerPubkey === userPubkey
                                     ? ["shop_profile"]
-                                    : ["shop", "inquiry", "copy_npub"]
+                                    : ["shop", "inquiry", "follow", "copy_npub"]
                                 }
                               />
                             </div>

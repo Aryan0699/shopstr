@@ -29,8 +29,10 @@ import {
   getLocalStorageData,
   getDefaultRelays,
   LogOut,
+  followUser,
+  unfollowUser,
 } from "@/utils/nostr/nostr-helper-functions";
-import { HeroUIProvider } from "@heroui/react";
+import { HeroUIProvider, ToastProvider } from "@heroui/react";
 import { ThemeProvider as NextThemesProvider } from "next-themes";
 import {
   fetchAllPosts,
@@ -275,13 +277,64 @@ function Shopstr({ props }: { props: AppProps }) {
     return unreadMessageIds;
   }, [chatsMap]);
 
+  const addFollow = useCallback(
+    async (targetPubkey: string): Promise<boolean> => {
+      if (!nostr || !signer) return false;
+      const result = await followUser(nostr, signer, targetPubkey);
+      if (result) {
+        setFollowsContext((prev) => {
+          if (prev.followList.includes(targetPubkey)) return prev;
+          return {
+            ...prev,
+            followList: [...prev.followList, targetPubkey],
+            firstDegreeFollowsLength: prev.firstDegreeFollowsLength + 1,
+          };
+        });
+        return true;
+      }
+      return false;
+    },
+    [nostr, signer]
+  );
+
+  const removeFollow = useCallback(
+    async (targetPubkey: string): Promise<boolean> => {
+      if (!nostr || !signer) return false;
+      const result = await unfollowUser(nostr, signer, targetPubkey);
+      if (result) {
+        setFollowsContext((prev) => ({
+          ...prev,
+          followList: prev.followList.filter((pk) => pk !== targetPubkey),
+          firstDegreeFollowsLength: Math.max(
+            0,
+            prev.firstDegreeFollowsLength - 1
+          ),
+        }));
+        return true;
+      }
+      return false;
+    },
+    [nostr, signer]
+  );
+
   const [followsContext, setFollowsContext] = useState<FollowsContextInterface>(
     {
       followList: [],
       firstDegreeFollowsLength: 0,
       isLoading: true,
+      addFollow: async () => false,
+      removeFollow: async () => false,
     }
   );
+
+  // Keep addFollow/removeFollow refs in sync with the context
+  useEffect(() => {
+    setFollowsContext((prev) => ({
+      ...prev,
+      addFollow,
+      removeFollow,
+    }));
+  }, [addFollow, removeFollow]);
 
   const [communityContext, setCommunityContext] =
     useState<CommunityContextInterface>({
@@ -412,11 +465,12 @@ function Shopstr({ props }: { props: AppProps }) {
     firstDegreeFollowsLength: number,
     isLoading: boolean
   ) => {
-    setFollowsContext({
+    setFollowsContext((prev) => ({
+      ...prev,
       followList,
       firstDegreeFollowsLength,
       isLoading,
-    });
+    }));
   };
 
   const editCommunityContext = (
@@ -781,6 +835,7 @@ function App(props: AppProps) {
   return (
     <>
       <HeroUIProvider>
+        <ToastProvider />
         <NextThemesProvider attribute="class">
           <NostrContextProvider>
             <SignerContextProvider>

@@ -1034,6 +1034,135 @@ export async function finalizeAndSendNostrEvent(
   }
 }
 
+/**
+ * Follow a user by appending their pubkey to the current NIP-02 kind:3 contact list.
+ * Returns the signed event on success, null on failure.
+ */
+export async function followUser(
+  nostr: NostrManager,
+  signer: NostrSigner,
+  targetPubkey: string
+): Promise<NostrEvent | null> {
+  try {
+    const userPubkey = await signer.getPubKey();
+    const { readRelays, writeRelays, relays } = getLocalStorageData();
+    const allRelays = [...new Set([...readRelays, ...writeRelays, ...relays])];
+
+    // Fetch current kind:3 contact list
+    const events = await nostr.fetch(
+      [{ kinds: [3], authors: [userPubkey] }],
+      {},
+      allRelays
+    );
+
+    // Pick the most recent kind:3 event
+    let latestEvent: NostrEvent | null = null;
+    for (const event of events) {
+      if (!latestEvent || event.created_at > latestEvent.created_at) {
+        latestEvent = event as NostrEvent;
+      }
+    }
+
+    const existingTags = latestEvent?.tags ?? [];
+    const existingContent = latestEvent?.content ?? "";
+
+    // Check if already following
+    const alreadyFollowing = existingTags.some(
+      (tag) => tag[0] === "p" && tag[1] === targetPubkey
+    );
+    if (alreadyFollowing) {
+      return latestEvent;
+    }
+
+    // Build updated event
+    const eventTemplate: EventTemplate = {
+      kind: 3,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: [...existingTags, ["p", targetPubkey]],
+      content: existingContent,
+    };
+
+    const signedEvent = await finalizeAndSendNostrEvent(
+      signer,
+      nostr,
+      eventTemplate
+    );
+    return signedEvent as NostrEvent;
+  } catch (error) {
+    console.error("followUser failed:", error);
+    return null;
+  }
+}
+
+/**
+ * Unfollow a user by removing their pubkey from the current NIP-02 kind:3 contact list.
+ * Returns the signed event on success, null on failure.
+ */
+export async function unfollowUser(
+  nostr: NostrManager,
+  signer: NostrSigner,
+  targetPubkey: string
+): Promise<NostrEvent | null> {
+  try {
+    const userPubkey = await signer.getPubKey();
+    const { readRelays, writeRelays, relays } = getLocalStorageData();
+    const allRelays = [...new Set([...readRelays, ...writeRelays, ...relays])];
+
+    // Fetch current kind:3 contact list
+    const events = await nostr.fetch(
+      [{ kinds: [3], authors: [userPubkey] }],
+      {},
+      allRelays
+    );
+
+    // Pick the most recent kind:3 event
+    let latestEvent: NostrEvent | null = null;
+    for (const event of events) {
+      if (!latestEvent || event.created_at > latestEvent.created_at) {
+        latestEvent = event as NostrEvent;
+      }
+    }
+
+    if (!latestEvent) {
+      // No contact list exists — nothing to unfollow from
+      return null;
+    }
+
+    const existingTags = latestEvent.tags;
+    const existingContent = latestEvent.content ?? "";
+
+    // Check if actually following
+    const isFollowing = existingTags.some(
+      (tag) => tag[0] === "p" && tag[1] === targetPubkey
+    );
+    if (!isFollowing) {
+      return latestEvent; // Not following, no-op
+    }
+
+    // Filter out the target pubkey
+    const updatedTags = existingTags.filter(
+      (tag) => !(tag[0] === "p" && tag[1] === targetPubkey)
+    );
+
+    const eventTemplate: EventTemplate = {
+      kind: 3,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: updatedTags,
+      content: existingContent,
+    };
+
+    const signedEvent = await finalizeAndSendNostrEvent(
+      signer,
+      nostr,
+      eventTemplate
+    );
+    return signedEvent as NostrEvent;
+  } catch (error) {
+    console.error("unfollowUser failed:", error);
+    return null;
+  }
+}
+
 export type BlossomUploadResponse = {
   url: string;
   sha256: string;

@@ -5,8 +5,8 @@ import { nip19 } from "nostr-tools";
 
 import useNavigation from "@/components/hooks/use-navigation";
 
-import { ShopMapContext } from "@/utils/context/context";
-import { Button, useDisclosure } from "@heroui/react";
+import { ShopMapContext, FollowsContext } from "@/utils/context/context";
+import { Button, useDisclosure, addToast } from "@heroui/react";
 import { SHOPSTRBUTTONCLASSNAMES } from "@/utils/STATIC-VARIABLES";
 import { useRouter } from "next/router";
 import SignInModal from "../sign-in/SignInModal";
@@ -40,6 +40,35 @@ const SideShopNav = ({
   const [usersPubkey, setUsersPubkey] = useState<string | null>(null);
 
   const { pubkey: userPubkey, isLoggedIn } = useContext(SignerContext);
+  const followsContext = useContext(FollowsContext);
+  const [isFollowActionLoading, setIsFollowActionLoading] = useState(false);
+  const isFollowingFocusedPubkey =
+    followsContext.followList.includes(focusedPubkey);
+
+  const handleFollowToggle = async () => {
+    if (!isLoggedIn) {
+      onOpen();
+      return;
+    }
+    setIsFollowActionLoading(true);
+    try {
+      if (isFollowingFocusedPubkey) {
+        const success = await followsContext.removeFollow(focusedPubkey);
+        if (success) {
+          addToast({ title: "Unfollowed merchant", color: "default" });
+        }
+      } else {
+        const success = await followsContext.addFollow(focusedPubkey);
+        if (success) {
+          addToast({ title: "Following ✓", color: "success" });
+        }
+      }
+    } catch (error) {
+      console.error("Follow action failed:", error);
+    } finally {
+      setIsFollowActionLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (
@@ -139,6 +168,22 @@ const SideShopNav = ({
                 Message seller
               </span>
             </Button>
+            {focusedPubkey !== userPubkey && (
+              <Button
+                onClick={handleFollowToggle}
+                isLoading={isFollowActionLoading}
+                isDisabled={isFollowActionLoading}
+                className={`${SHOPSTRBUTTONCLASSNAMES} flex flex-row items-center py-7`}
+              >
+                <span className="hidden text-2xl md:flex">
+                  {isFollowActionLoading
+                    ? "Please Sign..."
+                    : isFollowingFocusedPubkey
+                      ? "Unfollow"
+                      : "+ Follow"}
+                </span>
+              </Button>
+            )}
             {shopAbout && (
               <div className="text-light-text dark:text-dark-text flex w-full flex-col justify-start bg-transparent py-8">
                 <h2 className="pb-2 text-2xl font-bold">About</h2>

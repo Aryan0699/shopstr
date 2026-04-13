@@ -1,5 +1,9 @@
 import { LogOut } from "@/utils/nostr/nostr-helper-functions";
-import { ProfileMapContext, ShopMapContext } from "@/utils/context/context";
+import {
+  ProfileMapContext,
+  ShopMapContext,
+  FollowsContext,
+} from "@/utils/context/context";
 import {
   Dropdown,
   DropdownItem,
@@ -7,7 +11,9 @@ import {
   DropdownMenu,
   DropdownTrigger,
   User,
+  Spinner,
   useDisclosure,
+  addToast,
 } from "@heroui/react";
 import { nip19 } from "nostr-tools";
 import { useContext, useEffect, useState } from "react";
@@ -21,6 +27,8 @@ import {
   Cog6ToothIcon,
   GlobeAltIcon,
   UserIcon,
+  UserPlusIcon,
+  UserMinusIcon,
 } from "@heroicons/react/24/outline";
 import { useRouter } from "next/router";
 import { SignerContext } from "@/components/utility-components/nostr-context-provider";
@@ -35,7 +43,8 @@ type DropDownKeys =
   | "settings"
   | "user_profile"
   | "logout"
-  | "copy_npub";
+  | "copy_npub"
+  | "follow";
 
 const fetchedProfileContentCache = new Map<string, ProfileData["content"]>();
 const inFlightProfileRequests = new Map<
@@ -95,8 +104,11 @@ export const ProfileWithDropdown = ({
   >(null);
   const [isNPubCopied, setIsNPubCopied] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isFollowLoading, setIsFollowLoading] = useState(false);
   const profileContext = useContext(ProfileMapContext);
   const shopMapContext = useContext(ShopMapContext);
+  const followsContext = useContext(FollowsContext);
+  const isFollowing = followsContext.followList.includes(pubkey);
   const npub = pubkey ? nip19.npubEncode(pubkey) : "";
   const router = useRouter();
   const { isLoggedIn } = useContext(SignerContext);
@@ -299,6 +311,55 @@ export const ProfileWithDropdown = ({
         });
       },
       label: isNPubCopied ? "Copied!" : "Copy npub",
+    },
+    follow: {
+      key: "follow",
+      color: "default",
+      className: "text-light-text dark:text-dark-text",
+      startContent: isFollowLoading ? (
+        <Spinner size="sm" />
+      ) : isFollowing ? (
+        <UserMinusIcon className="h-5 w-5" />
+      ) : (
+        <UserPlusIcon className="h-5 w-5" />
+      ),
+      onPress: () => {
+        handleDropdownAction(async () => {
+          if (!isLoggedIn) {
+            onOpen();
+            return;
+          }
+          setIsFollowLoading(true);
+          try {
+            if (isFollowing) {
+              const success = await followsContext.removeFollow(pubkey);
+              if (success) {
+                addToast({
+                  title: "Unfollowed merchant",
+                  color: "default",
+                });
+              }
+            } else {
+              const success = await followsContext.addFollow(pubkey);
+              if (success) {
+                addToast({
+                  title: "Following ✓",
+                  color: "success",
+                });
+              }
+            }
+          } catch (error) {
+            console.error("Follow action failed:", error);
+          } finally {
+            setIsFollowLoading(false);
+          }
+        });
+      },
+      label: isFollowLoading
+        ? "Following..."
+        : isFollowing
+          ? "Unfollow"
+          : "+ Follow",
     },
   };
 

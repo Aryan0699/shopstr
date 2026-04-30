@@ -60,10 +60,16 @@ const renderComponent = ({
   focusedPubkey = "",
   routerQuery = {},
   isLoggedIn = true,
+  directFollowList = [] as string[],
+  addFollow = jest.fn(),
+  removeFollow = jest.fn(),
 }: {
   focusedPubkey?: string;
   routerQuery?: any;
   isLoggedIn?: boolean;
+  directFollowList?: string[];
+  addFollow?: jest.Mock;
+  removeFollow?: jest.Mock;
 }) => {
   const mockRouterPush = jest.fn();
   const mockRouterReplace = jest.fn();
@@ -134,12 +140,12 @@ const renderComponent = ({
           >
             <FollowsContext.Provider
               value={{
-                directFollowList: [],
-                followList: [],
-                firstDegreeFollowsLength: 0,
+                directFollowList,
+                followList: directFollowList,
+                firstDegreeFollowsLength: directFollowList.length,
                 isLoading: false,
-                addFollow: jest.fn(),
-                removeFollow: jest.fn(),
+                addFollow,
+                removeFollow,
               }}
             >
               <MarketplacePage
@@ -161,6 +167,8 @@ const renderComponent = ({
     mockRouterPush,
     mockRouterReplace,
     mockOnOpen,
+    addFollow,
+    removeFollow,
   };
 };
 
@@ -245,6 +253,19 @@ describe("MarketplacePage Component", () => {
     });
     await userEvent.click(screen.getByRole("button", { name: "Message" }));
     expect(mockOnOpen).toHaveBeenCalled();
+  });
+
+  it('calls addFollow when clicking "+ Follow" in shop view', async () => {
+    const addFollow = jest.fn().mockResolvedValue(true);
+    renderComponent({
+      focusedPubkey: "shop1",
+      isLoggedIn: true,
+      addFollow,
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "+ Follow" }));
+
+    expect(addFollow).toHaveBeenCalledWith("shop1");
   });
 
   it.each([

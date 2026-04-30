@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import SideShopNav from "../side-shop-nav";
-import { ShopMapContext } from "@/utils/context/context";
+import { FollowsContext, ShopMapContext } from "@/utils/context/context";
 import { SignerContext } from "@/components/utility-components/nostr-context-provider";
 import { useDisclosure } from "@heroui/react";
 import { useRouter } from "next/router";
@@ -29,6 +29,9 @@ const renderComponent = ({
   isEditingShop = false,
   categories = [] as string[],
   aboutText = "",
+  directFollowList = [] as string[],
+  addFollow = jest.fn(),
+  removeFollow = jest.fn(),
 }) => {
   const MOCK_VALID_PUBKEY = "a1".repeat(32);
   const mockRouterPush = jest.fn();
@@ -54,24 +57,41 @@ const renderComponent = ({
     <SignerContext.Provider
       value={{ isLoggedIn, pubkey: isLoggedIn ? "user-pubkey" : undefined }}
     >
-      <ShopMapContext.Provider
+      <FollowsContext.Provider
         value={{
-          shopData: mockShopData,
+          directFollowList,
+          followList: directFollowList,
+          firstDegreeFollowsLength: directFollowList.length,
           isLoading: false,
-          updateShopData: jest.fn(),
+          addFollow,
+          removeFollow,
         }}
       >
-        <SideShopNav
-          focusedPubkey={MOCK_VALID_PUBKEY}
-          categories={categories}
-          setSelectedCategories={mockSetSelectedCategories}
-          isEditingShop={isEditingShop}
-        />
-      </ShopMapContext.Provider>
+        <ShopMapContext.Provider
+          value={{
+            shopData: mockShopData,
+            isLoading: false,
+            updateShopData: jest.fn(),
+          }}
+        >
+          <SideShopNav
+            focusedPubkey={MOCK_VALID_PUBKEY}
+            categories={categories}
+            setSelectedCategories={mockSetSelectedCategories}
+            isEditingShop={isEditingShop}
+          />
+        </ShopMapContext.Provider>
+      </FollowsContext.Provider>
     </SignerContext.Provider>
   );
 
-  return { mockRouterPush, mockOnOpen, mockSetSelectedCategories };
+  return {
+    mockRouterPush,
+    mockOnOpen,
+    mockSetSelectedCategories,
+    addFollow,
+    removeFollow,
+  };
 };
 
 describe("SideShopNav Component", () => {
@@ -128,6 +148,28 @@ describe("SideShopNav Component", () => {
 
       expect(screen.getByText("About")).toBeInTheDocument();
       expect(screen.getByText("Welcome to our test shop!")).toBeInTheDocument();
+    });
+
+    it('should call addFollow when "+ Follow" is clicked', async () => {
+      const addFollow = jest.fn().mockResolvedValue(true);
+      renderComponent({ isLoggedIn: true, addFollow });
+
+      await userEvent.click(screen.getByText("+ Follow"));
+
+      expect(addFollow).toHaveBeenCalledWith("a1".repeat(32));
+    });
+
+    it('should call removeFollow when "Unfollow" is clicked', async () => {
+      const removeFollow = jest.fn().mockResolvedValue(true);
+      renderComponent({
+        isLoggedIn: true,
+        directFollowList: ["a1".repeat(32)],
+        removeFollow,
+      });
+
+      await userEvent.click(screen.getByText("Unfollow"));
+
+      expect(removeFollow).toHaveBeenCalledWith("a1".repeat(32));
     });
   });
 

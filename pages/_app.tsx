@@ -69,7 +69,7 @@ import { retryFailedRelayPublishes } from "@/utils/nostr/retry-service";
 import { MintRecoveryBoot } from "@/components/utility-components/mint-recovery-boot";
 import { NostrManager } from "@/utils/nostr/nostr-manager";
 
-function Shopstr({ props }: { props: AppProps }) {
+export function Shopstr({ props }: { props: AppProps }) {
   const { Component, pageProps } = props;
   const { nostr } = useContext(NostrContext);
   const { signer, isLoggedIn } = useContext(SignerContext);

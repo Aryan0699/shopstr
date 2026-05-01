@@ -1,30 +1,7 @@
 import type { AppProps } from "next/app";
 import "../styles/globals.css";
-import { useState, useEffect, useCallback, useContext, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
-import {
-  ProfileMapContext,
-  ProfileContextInterface,
-  ShopMapContext,
-  ShopContextInterface,
-  ProductContext,
-  ProductContextInterface,
-  ChatsContextInterface,
-  ChatsContext,
-  ChatsMap,
-  ReviewsContextInterface,
-  ReviewsContext,
-  FollowsContextInterface,
-  FollowsContext,
-  RelaysContextInterface,
-  RelaysContext,
-  BlossomContextInterface,
-  BlossomContext,
-  CashuWalletContext,
-  CashuWalletContextInterface,
-  CommunityContext,
-  CommunityContextInterface,
-} from "../utils/context/context";
 import {
   getLocalStorageData,
   getDefaultRelays,
@@ -45,14 +22,7 @@ import {
   fetchAllCommunities,
   fetchGiftWrappedChatsAndMessages,
 } from "@/utils/nostr/fetch-service";
-import {
-  NostrEvent,
-  Community,
-  ProfileData,
-  NostrMessageEvent,
-  ShopProfile,
-} from "../utils/types/types";
-import { Proof } from "@cashu/cashu-ts";
+import { NostrMessageEvent } from "../utils/types/types";
 import TopNav from "@/components/nav-top";
 import PageLoadingBar from "@/components/page-loading-bar";
 import DynamicHead from "../components/dynamic-meta-head";
@@ -60,422 +30,26 @@ import StructuredData from "../components/structured-data";
 import {
   NostrContextProvider,
   SignerContextProvider,
-  NostrContext,
-  SignerContext,
 } from "@/components/utility-components/nostr-context-provider";
 import { retryFailedRelayPublishes } from "@/utils/nostr/retry-service";
 import { MintRecoveryBoot } from "@/components/utility-components/mint-recovery-boot";
 import { NostrManager } from "@/utils/nostr/nostr-manager";
 
+// Zustand stores
+import { useAuthStore } from "@/utils/stores/auth-store";
+import { useMarketStore } from "@/utils/stores/market-store";
+import { useSocialStore } from "@/utils/stores/social-store";
+import { useWalletStore } from "@/utils/stores/wallet-store";
+import { useConfigStore } from "@/utils/stores/config-store";
+import type { ChatsMap } from "@/utils/stores/social-store";
+
 function Shopstr({ props }: { props: AppProps }) {
   const { Component, pageProps } = props;
-  const { nostr } = useContext(NostrContext);
-  const { signer, isLoggedIn } = useContext(SignerContext);
 
-  const [productContext, setProductContext] = useState<ProductContextInterface>(
-    {
-      productEvents: [],
-      isLoading: true,
-      addNewlyCreatedProductEvent: (productEvent: NostrEvent) => {
-        setProductContext((productContext) => {
-          const productEvents = [...productContext.productEvents, productEvent];
-          return {
-            productEvents: productEvents,
-            isLoading: false,
-            addNewlyCreatedProductEvent:
-              productContext.addNewlyCreatedProductEvent,
-            removeDeletedProductEvent: productContext.removeDeletedProductEvent,
-          };
-        });
-      },
-      removeDeletedProductEvent: (productId: string) => {
-        setProductContext((productContext) => {
-          const productEvents = [...productContext.productEvents].filter(
-            (event) => event.id !== productId
-          );
-          return {
-            productEvents: productEvents,
-            isLoading: false,
-            addNewlyCreatedProductEvent:
-              productContext.addNewlyCreatedProductEvent,
-            removeDeletedProductEvent: productContext.removeDeletedProductEvent,
-          };
-        });
-      },
-    }
-  );
-
-  const [reviewsContext, setReviewsContext] = useState<ReviewsContextInterface>(
-    {
-      merchantReviewsData: new Map(),
-      productReviewsData: new Map(),
-      isLoading: true,
-      updateMerchantReviewsData: (
-        merchantPubkey: string,
-        merchantReviewsData: number[]
-      ) => {
-        setReviewsContext((reviewsContext) => {
-          const merchantReviewsDataMap = new Map(
-            reviewsContext.merchantReviewsData
-          );
-          merchantReviewsDataMap.set(merchantPubkey, merchantReviewsData);
-          return {
-            merchantReviewsData: merchantReviewsDataMap,
-            productReviewsData: reviewsContext.productReviewsData,
-            isLoading: false,
-            updateMerchantReviewsData: reviewsContext.updateMerchantReviewsData,
-            updateProductReviewsData: reviewsContext.updateProductReviewsData,
-          };
-        });
-      },
-      updateProductReviewsData: (
-        merchantPubkey: string,
-        productDTag: string,
-        productReviewsData: Map<string, string[][]>
-      ) => {
-        setReviewsContext((reviewsContext) => {
-          const productReviewsDataMap = new Map(
-            reviewsContext.productReviewsData
-          );
-          const productScoreMap = new Map(
-            reviewsContext.productReviewsData.get(merchantPubkey)
-          );
-          productReviewsDataMap.set(
-            merchantPubkey,
-            productScoreMap.set(productDTag, productReviewsData)
-          );
-          return {
-            merchantReviewsData: reviewsContext.merchantReviewsData,
-            productReviewsData: productReviewsDataMap,
-            isLoading: false,
-            updateMerchantReviewsData: reviewsContext.updateMerchantReviewsData,
-            updateProductReviewsData: reviewsContext.updateProductReviewsData,
-          };
-        });
-      },
-    }
-  );
-
-  const [shopContext, setShopContext] = useState<ShopContextInterface>({
-    shopData: new Map(),
-    isLoading: true,
-    updateShopData: (shopData: ShopProfile) => {
-      setShopContext((shopContext) => {
-        const shopDataMap = new Map(shopContext.shopData);
-        shopDataMap.set(shopData.pubkey, shopData);
-        return {
-          shopData: shopDataMap,
-          isLoading: false,
-          updateShopData: shopContext.updateShopData,
-        };
-      });
-    },
-  });
-
-  const [profileContext, setProfileContext] = useState<ProfileContextInterface>(
-    {
-      profileData: new Map(),
-      isLoading: true,
-      updateProfileData: (profileData: ProfileData) => {
-        setProfileContext((profileContext) => {
-          const newProfileData = new Map(profileContext.profileData);
-          newProfileData.set(profileData.pubkey, profileData);
-          return {
-            profileData: newProfileData,
-            isLoading: false,
-            updateProfileData: profileContext.updateProfileData,
-          };
-        });
-      },
-    }
-  );
-
-  const [chatsMap, setChatMap] = useState(new Map());
-  const [isChatLoading, setIsChatLoading] = useState(true);
-  const [newOrderIds, setNewOrderIds] = useState<Set<string>>(new Set());
-
-  const addNewlyCreatedMessageEvent = useCallback(
-    async (messageEvent: NostrMessageEvent, sent?: boolean) => {
-      const pubkey = await signer?.getPubKey();
-      const newChatsMap = new Map(chatsMap);
-      const eventWithReadStatus = {
-        ...messageEvent,
-        read: sent ? true : false,
-      };
-      let chatArray;
-      if (messageEvent.pubkey === pubkey) {
-        const recipientPubkey = messageEvent.tags.find(
-          (tag) => tag[0] === "p"
-        )?.[1];
-        if (recipientPubkey) {
-          chatArray = newChatsMap.get(recipientPubkey) || [];
-          if (sent) {
-            chatArray.push(eventWithReadStatus);
-          } else {
-            chatArray = [eventWithReadStatus, ...chatArray];
-          }
-          newChatsMap.set(recipientPubkey, chatArray);
-        }
-      } else {
-        chatArray = newChatsMap.get(messageEvent.pubkey) || [];
-        if (sent) {
-          chatArray.push(eventWithReadStatus);
-        } else {
-          chatArray = [eventWithReadStatus, ...chatArray];
-        }
-        newChatsMap.set(messageEvent.pubkey, chatArray);
-      }
-      setChatMap(newChatsMap);
-      setIsChatLoading(false);
-    },
-    [chatsMap, signer]
-  );
-
-  const markAllMessagesAsRead = useCallback(async (): Promise<string[]> => {
-    const unreadMessageIds: string[] = [];
-    const wrappedEventIds: string[] = [];
-
-    for (const [_, messages] of chatsMap) {
-      for (const message of messages as NostrMessageEvent[]) {
-        if (!message.read) {
-          unreadMessageIds.push(message.id);
-          if (message.wrappedEventId) {
-            wrappedEventIds.push(message.wrappedEventId);
-          }
-        }
-      }
-    }
-
-    if (unreadMessageIds.length > 0) {
-      try {
-        const idsForDb =
-          wrappedEventIds.length > 0 ? wrappedEventIds : unreadMessageIds;
-        const body = JSON.stringify({ messageIds: idsForDb });
-        const authHeader = await createNip98AuthorizationHeader(
-          signer!,
-          `${window.location.origin}/api/db/mark-messages-read`,
-          "POST",
-          body
-        );
-        await fetch("/api/db/mark-messages-read", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: authHeader,
-          },
-          body,
-        });
-
-        setNewOrderIds(new Set(unreadMessageIds));
-
-        const newChatsMap = new Map(chatsMap);
-        for (const [pubkey, messages] of newChatsMap) {
-          const updatedMessages = (messages as NostrMessageEvent[]).map(
-            (msg) => ({
-              ...msg,
-              read: true,
-            })
-          );
-          newChatsMap.set(pubkey, updatedMessages);
-        }
-        setChatMap(newChatsMap);
-      } catch (error) {
-        console.error("Failed to mark messages as read:", error);
-      }
-    }
-
-    return unreadMessageIds;
-  }, [chatsMap, signer]);
-
-  const [followsContext, setFollowsContext] = useState<FollowsContextInterface>(
-    {
-      followList: [],
-      firstDegreeFollowsLength: 0,
-      isLoading: true,
-    }
-  );
-
-  const [communityContext, setCommunityContext] =
-    useState<CommunityContextInterface>({
-      communities: new Map(),
-      posts: new Map(),
-      isLoading: true,
-      addCommunity: (community: Community) => {
-        setCommunityContext((prev) => {
-          const newCommunities = new Map(prev.communities);
-          newCommunities.set(community.id, community);
-          return {
-            ...prev,
-            communities: newCommunities,
-          };
-        });
-      },
-    });
-
-  const [relaysContext, setRelaysContext] = useState<RelaysContextInterface>({
-    relayList: [],
-    readRelayList: [],
-    writeRelayList: [],
-    isLoading: true,
-  });
-
-  const [blossomContext, setBlossomContext] = useState<BlossomContextInterface>(
-    {
-      blossomServers: [],
-      isLoading: true,
-    }
-  );
-
-  const [cashuWalletContext, setCashuWalletContext] =
-    useState<CashuWalletContextInterface>({
-      proofEvents: [],
-      cashuMints: [],
-      cashuProofs: [],
-      isLoading: true,
-    });
-
-  const editProductContext = (
-    productEvents: NostrEvent[] | null,
-    isLoading: boolean
-  ) => {
-    setProductContext((productContext) => {
-      return {
-        productEvents: productEvents ?? productContext.productEvents,
-        isLoading: isLoading,
-        addNewlyCreatedProductEvent: productContext.addNewlyCreatedProductEvent,
-        removeDeletedProductEvent: productContext.removeDeletedProductEvent,
-      };
-    });
-  };
-
-  const editReviewsContext = (
-    merchantReviewsData: Map<string, number[]>,
-    productReviewsData: Map<string, Map<string, Map<string, string[][]>>>,
-    isLoading: boolean
-  ) => {
-    setReviewsContext((reviewsContext) => {
-      return {
-        merchantReviewsData,
-        productReviewsData,
-        isLoading,
-        updateMerchantReviewsData: reviewsContext.updateMerchantReviewsData,
-        updateProductReviewsData: reviewsContext.updateProductReviewsData,
-      };
-    });
-  };
-
-  const editShopContext = (
-    shopData: Map<string, ShopProfile>,
-    isLoading: boolean
-  ) => {
-    setShopContext((shopContext) => {
-      return {
-        shopData,
-        isLoading,
-        updateShopData: shopContext.updateShopData,
-      };
-    });
-  };
-
-  const editProfileContext = (
-    profileData: Map<string, any>,
-    isLoading: boolean
-  ) => {
-    setProfileContext((profileContext) => {
-      const mergedProfileData = new Map(profileContext.profileData);
-
-      profileData.forEach((incomingProfile, pubkey) => {
-        const existingProfile = mergedProfileData.get(pubkey);
-        if (
-          !existingProfile ||
-          (incomingProfile?.created_at ?? 0) >
-            (existingProfile?.created_at ?? 0)
-        ) {
-          mergedProfileData.set(pubkey, incomingProfile);
-          return;
-        }
-
-        if (
-          (incomingProfile?.created_at ?? 0) ===
-          (existingProfile?.created_at ?? 0)
-        ) {
-          mergedProfileData.set(pubkey, {
-            ...existingProfile,
-            ...incomingProfile,
-          });
-        }
-      });
-
-      return {
-        profileData: mergedProfileData,
-        isLoading,
-        updateProfileData: profileContext.updateProfileData,
-      };
-    });
-  };
-
-  const editChatContext = (chatsMap: ChatsMap, isLoading: boolean) => {
-    setChatMap(chatsMap);
-    setIsChatLoading(isLoading);
-  };
-
-  const editFollowsContext = (
-    followList: string[],
-    firstDegreeFollowsLength: number,
-    isLoading: boolean
-  ) => {
-    setFollowsContext({
-      followList,
-      firstDegreeFollowsLength,
-      isLoading,
-    });
-  };
-
-  const editCommunityContext = (
-    communities: Map<string, Community>,
-    isLoading: boolean
-  ) => {
-    setCommunityContext((prev) => ({
-      ...prev,
-      communities,
-      isLoading,
-    }));
-  };
-
-  const editRelaysContext = (
-    relayList: string[],
-    readRelayList: string[],
-    writeRelayList: string[],
-    isLoading: boolean
-  ) => {
-    setRelaysContext({
-      relayList,
-      readRelayList,
-      writeRelayList,
-      isLoading,
-    });
-  };
-
-  const editBlossomContext = (blossomServers: string[], isLoading: boolean) => {
-    setBlossomContext({
-      blossomServers,
-      isLoading,
-    });
-  };
-
-  const editCashuWalletContext = (
-    proofEvents: any[],
-    cashuMints: string[],
-    cashuProofs: Proof[],
-    isLoading: boolean
-  ) => {
-    setCashuWalletContext({
-      proofEvents,
-      cashuMints,
-      cashuProofs,
-      isLoading,
-    });
-  };
+  // Read from Zustand stores instead of useContext
+  const nostr = useAuthStore((s) => s.nostr);
+  const signer = useAuthStore((s) => s.signer);
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
 
   const [focusedPubkey, setFocusedPubkey] = useState("");
   const [selectedSection, setSelectedSection] = useState("");
@@ -506,6 +80,97 @@ function Shopstr({ props }: { props: AppProps }) {
         });
 
         return guardedEditors;
+      };
+
+      // Store-based editor functions (replaces the old context setters)
+      const editProductContext = (
+        productEvents: any[] | null,
+        isLoading: boolean
+      ) => {
+        const store = useMarketStore.getState();
+        useMarketStore.setState({
+          productEvents: productEvents ?? store.productEvents,
+          isProductsLoading: isLoading,
+        });
+      };
+
+      const editReviewsContext = (
+        merchantReviewsData: Map<string, number[]>,
+        productReviewsData: Map<string, Map<string, Map<string, string[][]>>>,
+        isLoading: boolean
+      ) => {
+        useMarketStore.setState({
+          merchantReviewsData,
+          productReviewsData,
+          isReviewsLoading: isLoading,
+        });
+      };
+
+      const editShopContext = (
+        shopData: Map<string, any>,
+        isLoading: boolean
+      ) => {
+        useMarketStore.setState({
+          shopData,
+          isShopsLoading: isLoading,
+        });
+      };
+
+      const editProfileContext = (
+        profileData: Map<string, any>,
+        isLoading: boolean
+      ) => {
+        useMarketStore.getState().mergeProfiles(profileData, isLoading);
+      };
+
+      const editChatContext = (chatsMap: ChatsMap, isLoading: boolean) => {
+        useSocialStore.setState({
+          chatsMap,
+          isChatsLoading: isLoading,
+        });
+      };
+
+      const editFollowsContext = (
+        followList: string[],
+        firstDegreeFollowsLength: number,
+        isLoading: boolean
+      ) => {
+        useSocialStore.getState().setFollows(followList, firstDegreeFollowsLength, isLoading);
+      };
+
+      const editCommunityContext = (
+        communities: Map<string, any>,
+        isLoading: boolean
+      ) => {
+        useSocialStore.setState({
+          communities,
+          isCommunitiesLoading: isLoading,
+        });
+      };
+
+      const editRelaysContext = (
+        relayList: string[],
+        readRelayList: string[],
+        writeRelayList: string[],
+        isLoading: boolean
+      ) => {
+        useConfigStore.getState().setRelays(relayList, readRelayList, writeRelayList, isLoading);
+      };
+
+      const editBlossomContext = (
+        blossomServers: string[],
+        isLoading: boolean
+      ) => {
+        useConfigStore.getState().setBlossom(blossomServers, isLoading);
+      };
+
+      const editCashuWalletContext = (
+        proofEvents: any[],
+        cashuMints: string[],
+        cashuProofs: any[],
+        isLoading: boolean
+      ) => {
+        useWalletStore.getState().setWallet(proofEvents, cashuMints, cashuProofs, isLoading);
       };
 
       const {
@@ -702,6 +367,9 @@ function Shopstr({ props }: { props: AppProps }) {
 
         const pubkeysToFetchProfilesFor = Array.from(pubkeySet);
 
+        // Get the current profile data from the store
+        const currentProfileData = useMarketStore.getState().profileData;
+
         // These start immediately — no waiting for wallet, blossom, follows, or communities.
         await Promise.all([
           runTask(
@@ -712,11 +380,11 @@ function Shopstr({ props }: { props: AppProps }) {
                 allRelays,
                 pubkeysToFetchProfilesFor,
                 guardedEditProfileContext,
-                profileContext.profileData
+                currentProfileData
               ),
             () =>
               guardedEditProfileContext(
-                new Map(profileContext.profileData),
+                new Map(currentProfileData),
                 false
               )
           ),
@@ -817,71 +485,45 @@ function Shopstr({ props }: { props: AppProps }) {
     }
   }, []);
 
+  // Read from stores for the head component
+  const productEvents = useMarketStore((s) => s.productEvents);
+  const shopData = useMarketStore((s) => s.shopData);
+  const profileData = useMarketStore((s) => s.profileData);
+
   return (
     <>
       <DynamicHead
-        productEvents={productContext.productEvents}
-        shopEvents={shopContext.shopData}
-        profileData={profileContext.profileData}
+        productEvents={productEvents}
+        shopEvents={shopData}
+        profileData={profileData}
         ssrOgMeta={pageProps.ogMeta ?? null}
       />
       <StructuredData />
       <PageLoadingBar />
-      <CommunityContext.Provider value={communityContext}>
-        <RelaysContext.Provider value={relaysContext}>
-          <BlossomContext.Provider value={blossomContext}>
-            <CashuWalletContext.Provider value={cashuWalletContext}>
-              <FollowsContext.Provider value={followsContext}>
-                <ProductContext.Provider value={productContext}>
-                  <ReviewsContext.Provider value={reviewsContext}>
-                    <ProfileMapContext.Provider value={profileContext}>
-                      <ShopMapContext.Provider value={shopContext}>
-                        <ChatsContext.Provider
-                          value={
-                            {
-                              chatsMap: chatsMap,
-                              isLoading: isChatLoading,
-                              addNewlyCreatedMessageEvent:
-                                addNewlyCreatedMessageEvent,
-                              markAllMessagesAsRead: markAllMessagesAsRead,
-                              newOrderIds: newOrderIds,
-                            } as ChatsContextInterface
-                          }
-                        >
-                          {![
-                            "/",
-                            "/about",
-                            "/contact",
-                            "/faq",
-                            "/terms",
-                            "/privacy",
-                          ].includes(router.pathname) && (
-                            <TopNav
-                              setFocusedPubkey={setFocusedPubkey}
-                              setSelectedSection={setSelectedSection}
-                            />
-                          )}
-                          <div className="flex">
-                            <main className="flex-1">
-                              <Component
-                                {...pageProps}
-                                focusedPubkey={focusedPubkey}
-                                setFocusedPubkey={setFocusedPubkey}
-                                selectedSection={selectedSection}
-                                setSelectedSection={setSelectedSection}
-                              />
-                            </main>
-                          </div>
-                        </ChatsContext.Provider>
-                      </ShopMapContext.Provider>
-                    </ProfileMapContext.Provider>
-                  </ReviewsContext.Provider>
-                </ProductContext.Provider>
-              </FollowsContext.Provider>
-            </CashuWalletContext.Provider>
-          </BlossomContext.Provider>
-        </RelaysContext.Provider>
-      </CommunityContext.Provider>
+      {![
+        "/",
+        "/about",
+        "/contact",
+        "/faq",
+        "/terms",
+        "/privacy",
+      ].includes(router.pathname) && (
+        <TopNav
+          setFocusedPubkey={setFocusedPubkey}
+          setSelectedSection={setSelectedSection}
+        />
+      )}
+      <div className="flex">
+        <main className="flex-1">
+          <Component
+            {...pageProps}
+            focusedPubkey={focusedPubkey}
+            setFocusedPubkey={setFocusedPubkey}
+            selectedSection={selectedSection}
+            setSelectedSection={setSelectedSection}
+          />
+        </main>
+      </div>
     </>
   );
 }

@@ -1,9 +1,9 @@
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Input, Card, CardBody, CardHeader, Chip } from "@heroui/react";
 import { TrashIcon } from "@heroicons/react/24/outline";
 import { SHOPSTRBUTTONCLASSNAMES } from "@/utils/STATIC-VARIABLES";
 import { formatCurrentDateTimeLocalValue } from "@/utils/datetime-local";
-import { SignerContext } from "@/components/utility-components/nostr-context-provider";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import {
   buildDiscountCodeCreateProof,
   buildDiscountCodeDeleteProof,
@@ -20,7 +20,8 @@ interface DiscountCode {
 }
 
 export default function DiscountCodes() {
-  const { pubkey, signer } = useContext(SignerContext);
+  const pubkey = useAuthStore((s) => s.pubkey);
+  const signer = useAuthStore((s) => s.signer);
   const [codes, setCodes] = useState<DiscountCode[]>([]);
   const [newCode, setNewCode] = useState("");
   const [newDiscount, setNewDiscount] = useState("");

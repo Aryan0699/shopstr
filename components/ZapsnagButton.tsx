@@ -1,4 +1,4 @@
-import { useState, useContext, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   Button,
   Modal,
@@ -11,10 +11,7 @@ import {
 import { BoltIcon } from "@heroicons/react/24/outline";
 import { LightningAddress } from "@getalby/lightning-tools";
 import { NostrWebLNProvider } from "@getalby/sdk";
-import {
-  NostrContext,
-  SignerContext,
-} from "@/components/utility-components/nostr-context-provider";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import {
   getLocalStorageData,
   constructGiftWrappedEvent,
@@ -44,8 +41,10 @@ export default function ZapsnagButton({ product }: { product: ProductData }) {
     country: "",
   });
 
-  const { nostr: nostrManager } = useContext(NostrContext);
-  const { signer, isLoggedIn, pubkey: userPubkey } = useContext(SignerContext);
+  const nostrManager = useAuthStore((s) => s.nostr);
+  const signer = useAuthStore((s) => s.signer);
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const userPubkey = useAuthStore((s) => s.pubkey);
 
   useEffect(() => {
     if (typeof window !== "undefined") {

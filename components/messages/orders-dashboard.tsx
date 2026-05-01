@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useContext } from "react";
+import { useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { nip19 } from "nostr-tools";
 import {
@@ -16,11 +16,9 @@ import {
   HandThumbUpIcon,
   HandThumbDownIcon,
 } from "@heroicons/react/24/outline";
-import {
-  ChatsContext,
-  ProductContext,
-  ReviewsContext,
-} from "../../utils/context/context";
+import { useSocialStore } from "@/utils/stores/social-store";
+import { useMarketStore } from "@/utils/stores/market-store";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import { NostrMessageEvent } from "../../utils/types/types";
 import ShopstrSpinner from "../utility-components/shopstr-spinner";
 import FailureModal from "../utility-components/failure-modal";
@@ -46,10 +44,6 @@ import {
   generateKeys,
   publishReviewEvent,
 } from "@/utils/nostr/nostr-helper-functions";
-import {
-  NostrContext,
-  SignerContext,
-} from "@/components/utility-components/nostr-context-provider";
 import { SHOPSTRBUTTONCLASSNAMES } from "@/utils/STATIC-VARIABLES";
 import { calculateWeightedScore } from "@/utils/parsers/review-parser-functions";
 import { createNip98AuthorizationHeader } from "@/utils/nostr/nip98-auth";
@@ -116,8 +110,19 @@ interface OrderData {
 }
 
 const OrdersDashboard = () => {
-  const chatsContext = useContext(ChatsContext);
-  const productContext = useContext(ProductContext);
+  const chatsContext = {
+    chatsMap: useSocialStore((s) => s.chatsMap),
+    isLoading: useSocialStore((s) => s.isChatsLoading),
+    addNewlyCreatedMessageEvent: (msg: any, sent?: boolean) => useSocialStore.getState().addMessage(msg, sent),
+    markAllMessagesAsRead: async () => { useSocialStore.getState().markAllRead(); return [] as string[]; },
+    newOrderIds: useSocialStore((s) => s.newOrderIds),
+  };
+  const productContext = {
+    productEvents: useMarketStore((s) => s.productEvents),
+    isLoading: useMarketStore((s) => s.isProductsLoading),
+    addNewlyCreatedProductEvent: useMarketStore.getState().addProduct,
+    removeDeletedProductEvent: useMarketStore.getState().removeProduct,
+  };
   const [orders, setOrders] = useState<OrderData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [totalOrders, setTotalOrders] = useState(0);
@@ -177,13 +182,17 @@ const OrdersDashboard = () => {
   const [showFailureModal, setShowFailureModal] = useState(false);
   const [failureText, setFailureText] = useState("");
 
-  const {
-    signer,
-    pubkey: userPubkey,
-    npub: userNPub,
-  } = useContext(SignerContext);
-  const { nostr } = useContext(NostrContext);
-  const reviewsContext = useContext(ReviewsContext);
+  const signer = useAuthStore((s) => s.signer);
+  const userPubkey = useAuthStore((s) => s.pubkey);
+  const userNPub = useAuthStore((s) => s.npub);
+  const nostr = useAuthStore((s) => s.nostr);
+  const reviewsContext = {
+    merchantReviewsData: useMarketStore((s) => s.merchantReviewsData),
+    productReviewsData: useMarketStore((s) => s.productReviewsData),
+    isLoading: useMarketStore((s) => s.isReviewsLoading),
+    updateMerchantReviewsData: useMarketStore.getState().updateMerchantReview,
+    updateProductReviewsData: useMarketStore.getState().updateProductReview,
+  };
 
   const {
     handleSubmit: handleShippingSubmit,

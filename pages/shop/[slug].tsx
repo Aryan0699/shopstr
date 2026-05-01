@@ -1,8 +1,8 @@
 /* eslint-disable @next/next/no-img-element */
 
-import { useEffect, useState, useContext } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import { ShopMapContext } from "@/utils/context/context";
+import { useMarketStore } from "@/utils/stores/market-store";
 import StorefrontLayout from "@/components/storefront/storefront-layout";
 import ShopstrSpinner from "@/components/utility-components/shopstr-spinner";
 import { GetServerSideProps } from "next";
@@ -63,7 +63,10 @@ export const getServerSideProps: GetServerSideProps<ShopPageProps> = async (
 export default function ShopPage() {
   const router = useRouter();
   const { slug } = router.query;
-  const shopMapContext = useContext(ShopMapContext);
+  const shopMapContext = {
+    shopData: useMarketStore((s) => s.shopData),
+    isLoading: useMarketStore((s) => s.isShopsLoading),
+  };
   const [shopPubkey, setShopPubkey] = useState<string>("");
   const [initialShopConfig, setInitialShopConfig] = useState<Record<
     string,

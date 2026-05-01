@@ -1,18 +1,18 @@
 "use client";
 
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import MyListingsPage from "./my-listings";
 import ProductForm from "../product-form";
 import { useRouter } from "next/router";
 import { useSearchParams } from "next/navigation";
-import { SignerContext } from "@/components/utility-components/nostr-context-provider";
+import { useAuthStore } from "@/utils/stores/auth-store";
 
 const MyListingsFeed = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const [showModal, setShowModal] = useState(false);
-  const { isLoggedIn } = useContext(SignerContext);
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
 
   useEffect(() => {
     if (!searchParams || !isLoggedIn) return;

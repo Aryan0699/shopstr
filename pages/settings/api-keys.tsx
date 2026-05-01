@@ -1,7 +1,7 @@
-import { useState, useEffect, useContext, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button, Input, Select, SelectItem, Spinner } from "@heroui/react";
 import { SettingsBreadCrumbs } from "@/components/settings/settings-bread-crumbs";
-import { SignerContext } from "@/components/utility-components/nostr-context-provider";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import ProtectedRoute from "@/components/utility-components/protected-route";
 import { SHOPSTRBUTTONCLASSNAMES } from "@/utils/STATIC-VARIABLES";
 import { NostrEventTemplate } from "@/utils/nostr/nostr-manager";
@@ -33,7 +33,8 @@ interface ApiKeyItem {
 }
 
 const ApiKeysPage = () => {
-  const { pubkey, signer } = useContext(SignerContext);
+  const pubkey = useAuthStore((s) => s.pubkey);
+  const signer = useAuthStore((s) => s.signer);
   const [apiKeys, setApiKeys] = useState<ApiKeyItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);

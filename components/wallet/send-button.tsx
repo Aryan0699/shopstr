@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import {
   ArrowUpTrayIcon,
@@ -34,11 +34,8 @@ import {
   Proof,
 } from "@cashu/cashu-ts";
 import { safeSwap } from "@/utils/cashu/swap-retry-service";
-import { CashuWalletContext } from "../../utils/context/context";
-import {
-  NostrContext,
-  SignerContext,
-} from "@/components/utility-components/nostr-context-provider";
+import { useWalletStore } from "@/utils/stores/wallet-store";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import { NostrNIP46Signer } from "@/utils/nostr/signers/nostr-nip46-signer";
 
 const SendButton = () => {
@@ -48,10 +45,10 @@ const SendButton = () => {
   const [copiedToClipboard, setCopiedToClipboard] = useState(false);
   const [sendFailed, setSendFailed] = useState(false);
 
-  const walletContext = useContext(CashuWalletContext);
+  const walletContext = { proofEvents: useWalletStore((s) => s.proofEvents) };
 
-  const { signer } = useContext(SignerContext);
-  const { nostr } = useContext(NostrContext);
+  const signer = useAuthStore((s) => s.signer);
+  const nostr = useAuthStore((s) => s.nostr);
 
   const { mints, tokens, history } = getLocalStorageData();
 

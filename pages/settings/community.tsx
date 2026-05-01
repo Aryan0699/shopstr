@@ -1,6 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Card,
   CardBody,
@@ -10,11 +10,8 @@ import {
   Spinner,
 } from "@heroui/react";
 import { SettingsBreadCrumbs } from "@/components/settings/settings-bread-crumbs";
-import {
-  SignerContext,
-  NostrContext,
-} from "@/components/utility-components/nostr-context-provider";
-import { CommunityContext } from "@/utils/context/context";
+import { useAuthStore } from "@/utils/stores/auth-store";
+import { useSocialStore } from "@/utils/stores/social-store";
 import {
   createOrUpdateCommunity,
   deleteEvent,
@@ -26,9 +23,11 @@ import { SHOPSTRBUTTONCLASSNAMES } from "@/utils/STATIC-VARIABLES";
 import ProtectedRoute from "@/components/utility-components/protected-route";
 
 const CommunityManagementPage = () => {
-  const { signer, pubkey } = useContext(SignerContext);
-  const { nostr } = useContext(NostrContext);
-  const { communities, isLoading } = useContext(CommunityContext);
+  const signer = useAuthStore((s) => s.signer);
+  const pubkey = useAuthStore((s) => s.pubkey);
+  const nostr = useAuthStore((s) => s.nostr);
+  const communities = useSocialStore((s) => s.communities);
+  const isLoading = useSocialStore((s) => s.isCommunitiesLoading);
   const [myCommunities, setMyCommunities] = useState<Community[]>([]);
   const [communityToEdit, setCommunityToEdit] = useState<
     Community | "new" | null

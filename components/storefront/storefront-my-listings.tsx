@@ -1,6 +1,6 @@
 import { StorefrontColorScheme } from "@/utils/types/types";
-import { useContext, useMemo } from "react";
-import { ProductContext } from "@/utils/context/context";
+import { useMemo } from "react";
+import { useMarketStore } from "@/utils/stores/market-store";
 import parseTags, {
   ProductData,
 } from "@/utils/parsers/product-parser-functions";
@@ -16,7 +16,7 @@ export default function StorefrontMyListings({
   shopPubkey,
   colors,
 }: StorefrontMyListingsProps) {
-  const productContext = useContext(ProductContext);
+  const productContext = { productEvents: useMarketStore((s) => s.productEvents) };
 
   const sellerProducts = useMemo(() => {
     if (!shopPubkey || !productContext.productEvents.length) return [];

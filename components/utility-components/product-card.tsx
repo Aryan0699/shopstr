@@ -1,4 +1,4 @@
-import React, { useContext, useState } from "react";
+import React, { useState } from "react";
 import {
   Chip,
   Dropdown,
@@ -20,7 +20,7 @@ import CompactPriceDisplay from "./display-monetary-info";
 import { ProductData } from "@/utils/parsers/product-parser-functions";
 import { ProfileWithDropdown } from "./profile/profile-dropdown";
 import { useRouter } from "next/router";
-import { SignerContext } from "@/components/utility-components/nostr-context-provider";
+import { useAuthStore } from "@/utils/stores/auth-store";
 
 export default function ProductCard({
   productData,
@@ -38,7 +38,7 @@ export default function ProductCard({
   const [showEventIdModal, setShowEventIdModal] = useState(false);
 
   const router = useRouter();
-  const { pubkey: userPubkey } = useContext(SignerContext);
+  const userPubkey = useAuthStore((s) => s.pubkey);
   if (!productData) return null;
 
   const isZapsnag =

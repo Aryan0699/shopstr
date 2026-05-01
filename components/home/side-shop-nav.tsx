@@ -1,16 +1,16 @@
 "use client";
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { nip19 } from "nostr-tools";
 
 import useNavigation from "@/components/hooks/use-navigation";
 
-import { ShopMapContext } from "@/utils/context/context";
+import { useMarketStore } from "@/utils/stores/market-store";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import { Button, useDisclosure } from "@heroui/react";
 import { SHOPSTRBUTTONCLASSNAMES } from "@/utils/STATIC-VARIABLES";
 import { useRouter } from "next/router";
 import SignInModal from "../sign-in/SignInModal";
-import { SignerContext } from "@/components/utility-components/nostr-context-provider";
 import { ShopProfile } from "../../utils/types/types";
 
 const SideShopNav = ({
@@ -29,7 +29,7 @@ const SideShopNav = ({
 
   const { isOpen, onOpen, onClose } = useDisclosure();
 
-  const shopMapContext = useContext(ShopMapContext);
+  const shopMapContext = { shopData: useMarketStore((s) => s.shopData) };
 
   const [shopAbout, setShopAbout] = useState("");
 
@@ -39,7 +39,8 @@ const SideShopNav = ({
 
   const [usersPubkey, setUsersPubkey] = useState<string | null>(null);
 
-  const { pubkey: userPubkey, isLoggedIn } = useContext(SignerContext);
+  const userPubkey = useAuthStore((s) => s.pubkey);
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
 
   useEffect(() => {
     if (

@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import Head from "next/head";
 import { useRouter } from "next/router";
 import { useDisclosure } from "@heroui/react";
@@ -7,14 +7,9 @@ import {
   Bars3Icon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
-import {
-  ShopMapContext,
-  ProductContext,
-  ProfileMapContext,
-  ReviewsContext,
-  CommunityContext,
-} from "@/utils/context/context";
-import { SignerContext } from "@/components/utility-components/nostr-context-provider";
+import { useMarketStore } from "@/utils/stores/market-store";
+import { useSocialStore } from "@/utils/stores/social-store";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import { ProfileWithDropdown } from "@/components/utility-components/profile/profile-dropdown";
 import SignInModal from "@/components/sign-in/SignInModal";
 import {
@@ -70,12 +65,16 @@ export default function StorefrontLayout({
   initialShopConfig,
   initialCreatedAt = 0,
 }: StorefrontLayoutProps) {
-  const shopMapContext = useContext(ShopMapContext);
-  const productContext = useContext(ProductContext);
-  const profileContext = useContext(ProfileMapContext);
-  const reviewsContext = useContext(ReviewsContext);
-  const communityContext = useContext(CommunityContext);
-  const { isLoggedIn, pubkey: userPubkey } = useContext(SignerContext);
+  const shopMapContext = { shopData: useMarketStore((s) => s.shopData) };
+  const productContext = { productEvents: useMarketStore((s) => s.productEvents) };
+  const profileContext = { profileData: useMarketStore((s) => s.profileData) };
+  const reviewsContext = { merchantReviewsData: useMarketStore((s) => s.merchantReviewsData) };
+  const communityContext = {
+    communities: useSocialStore((s) => s.communities),
+    isLoading: useSocialStore((s) => s.isCommunitiesLoading),
+  };
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const userPubkey = useAuthStore((s) => s.pubkey);
   const router = useRouter();
   const { isOpen, onOpen, onClose } = useDisclosure();
 

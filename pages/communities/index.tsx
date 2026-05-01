@@ -1,13 +1,14 @@
-import { useContext, useState, useMemo } from "react";
-import { CommunityContext } from "@/utils/context/context";
+import { useState, useMemo } from "react";
+import { useSocialStore } from "@/utils/stores/social-store";
 import CommunityCard from "@/components/communities/CommunityCard";
 import { Spinner, Input, Divider } from "@heroui/react";
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
-import { SignerContext } from "@/components/utility-components/nostr-context-provider";
+import { useAuthStore } from "@/utils/stores/auth-store";
 
 const CommunitiesDiscoveryPage = () => {
-  const { communities, isLoading } = useContext(CommunityContext);
-  const { pubkey } = useContext(SignerContext);
+  const communities = useSocialStore((s) => s.communities);
+  const isLoading = useSocialStore((s) => s.isCommunitiesLoading);
+  const pubkey = useAuthStore((s) => s.pubkey);
   const [searchQuery, setSearchQuery] = useState("");
 
   const { myCommunities, otherCommunities } = useMemo(() => {

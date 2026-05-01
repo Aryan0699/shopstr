@@ -1,10 +1,11 @@
-import { useContext, useEffect } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/router";
 import { useDisclosure } from "@heroui/react";
-import { SignerContext } from "@/components/utility-components/nostr-context-provider";
+import { useAuthStore } from "@/utils/stores/auth-store";
 
 export function useAuthGuard() {
-  const { isLoggedIn, isAuthStateResolved } = useContext(SignerContext);
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const isAuthStateResolved = useAuthStore((s) => s.isAuthStateResolved);
   const router = useRouter();
   const { isOpen, onOpen, onClose } = useDisclosure();
   const hasResolvedAuthState = isAuthStateResolved ?? true;

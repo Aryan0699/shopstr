@@ -2,7 +2,6 @@
 import { Button, Input } from "@heroui/react";
 import {
   useEffect,
-  useContext,
   useRef,
   useState,
   type ChangeEvent,
@@ -37,13 +36,10 @@ import {
   generateKeys,
 } from "@/utils/nostr/nostr-helper-functions";
 import { calculateWeightedScore } from "@/utils/parsers/review-parser-functions";
-import { ReviewsContext } from "../../utils/context/context";
+import { useMarketStore } from "@/utils/stores/market-store";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import FailureModal from "../utility-components/failure-modal";
 import { getLatestShippingInfo } from "@/utils/messages/order-message-utils";
-import {
-  NostrContext,
-  SignerContext,
-} from "@/components/utility-components/nostr-context-provider";
 
 const ChatPanel = ({
   handleGoBack,
@@ -99,7 +95,13 @@ const ChatPanel = ({
   const [showFailureModal, setShowFailureModal] = useState(false);
   const [failureText, setFailureText] = useState("");
 
-  const reviewsContext = useContext(ReviewsContext);
+  const reviewsContext = {
+    merchantReviewsData: useMarketStore((s) => s.merchantReviewsData),
+    productReviewsData: useMarketStore((s) => s.productReviewsData),
+    isLoading: useMarketStore((s) => s.isReviewsLoading),
+    updateMerchantReviewsData: useMarketStore.getState().updateMerchantReview,
+    updateProductReviewsData: useMarketStore.getState().updateProductReview,
+  };
 
   const {
     handleSubmit: handleShippingSubmit,
@@ -123,12 +125,10 @@ const ChatPanel = ({
     },
   });
 
-  const {
-    signer,
-    pubkey: userPubkey,
-    npub: userNPub,
-  } = useContext(SignerContext);
-  const { nostr } = useContext(NostrContext);
+  const signer = useAuthStore((s) => s.signer);
+  const userPubkey = useAuthStore((s) => s.pubkey);
+  const userNPub = useAuthStore((s) => s.npub);
+  const nostr = useAuthStore((s) => s.nostr);
 
   const bottomDivRef = useRef<HTMLDivElement>(null);
 

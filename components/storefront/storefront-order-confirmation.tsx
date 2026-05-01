@@ -1,4 +1,4 @@
-import { useEffect, useState, useContext, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/router";
 import {
   CheckCircleIcon,
@@ -6,8 +6,8 @@ import {
   ClipboardDocumentListIcon,
 } from "@heroicons/react/24/outline";
 import { StorefrontColorScheme } from "@/utils/types/types";
-import { SignerContext } from "@/components/utility-components/nostr-context-provider";
-import { ProductContext } from "@/utils/context/context";
+import { useAuthStore } from "@/utils/stores/auth-store";
+import { useMarketStore } from "@/utils/stores/market-store";
 import parseTags, {
   ProductData,
 } from "@/utils/parsers/product-parser-functions";
@@ -64,8 +64,8 @@ export default function StorefrontOrderConfirmation({
   shopPubkey,
 }: StorefrontOrderConfirmationProps) {
   const router = useRouter();
-  const { isLoggedIn } = useContext(SignerContext);
-  const productContext = useContext(ProductContext);
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const productContext = { productEvents: useMarketStore((s) => s.productEvents) };
   const [orderData, setOrderData] = useState<OrderSummaryData | null>(null);
 
   useEffect(() => {

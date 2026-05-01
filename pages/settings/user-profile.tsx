@@ -1,6 +1,6 @@
-import { useEffect, useState, useContext, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { SettingsBreadCrumbs } from "@/components/settings/settings-bread-crumbs";
-import { ProfileMapContext } from "@/utils/context/context";
+import { useMarketStore } from "@/utils/stores/market-store";
 import { useForm, Controller } from "react-hook-form";
 import {
   Button,
@@ -17,10 +17,7 @@ import {
   EyeIcon,
 } from "@heroicons/react/24/outline";
 import { SHOPSTRBUTTONCLASSNAMES } from "@/utils/STATIC-VARIABLES";
-import {
-  SignerContext,
-  NostrContext,
-} from "@/components/utility-components/nostr-context-provider";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import { NostrNSecSigner } from "@/utils/nostr/signers/nostr-nsec-signer";
 import {
   createNostrProfileEvent,
@@ -33,20 +30,21 @@ import ShopstrSpinner from "@/components/utility-components/shopstr-spinner";
 import ProtectedRoute from "@/components/utility-components/protected-route";
 
 const UserProfilePage = () => {
-  const { nostr } = useContext(NostrContext);
+  const nostr = useAuthStore((s) => s.nostr);
   const [isUploadingProfile, setIsUploadingProfile] = useState(false);
   const [isFetchingProfile, setIsFetchingProfile] = useState(false);
-  const {
-    signer,
-    pubkey: userPubkey,
-    npub: userNPub,
-  } = useContext(SignerContext);
+  const signer = useAuthStore((s) => s.signer);
+  const userPubkey = useAuthStore((s) => s.pubkey);
+  const userNPub = useAuthStore((s) => s.npub);
   const [isNPubCopied, setIsNPubCopied] = useState(false);
   const [isNSecCopied, setIsNSecCopied] = useState(false);
   const [userNSec, setUserNSec] = useState("");
   const [viewState, setViewState] = useState<"shown" | "hidden">("hidden");
 
-  const profileContext = useContext(ProfileMapContext);
+  const profileContext = {
+    profileData: useMarketStore((s) => s.profileData),
+    updateProfileData: useMarketStore.getState().updateProfile,
+  };
   const { handleSubmit, control, reset, watch, setValue } = useForm({
     defaultValues: {
       banner: "",

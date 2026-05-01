@@ -2,8 +2,8 @@
 
 "use client";
 
-import { useContext, useEffect, useState } from "react";
-import { ShopMapContext } from "@/utils/context/context";
+import { useEffect, useState } from "react";
+import { useMarketStore } from "@/utils/stores/market-store";
 import { ShopProfile } from "../../utils/types/types";
 import { sanitizeUrl } from "@braintree/sanitize-url";
 import { useRouter } from "next/router";
@@ -26,7 +26,7 @@ const HomeFeed = ({
   const [shopBannerURL, setShopBannerURL] = useState("");
   const [isFetchingShop, setIsFetchingShop] = useState(false);
 
-  const shopMapContext = useContext(ShopMapContext);
+  const shopMapContext = { shopData: useMarketStore((s) => s.shopData) };
 
   useEffect(() => {
     setIsFetchingShop(true);

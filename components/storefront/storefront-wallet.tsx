@@ -1,6 +1,6 @@
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { StorefrontColorScheme } from "@/utils/types/types";
-import { SignerContext } from "@/components/utility-components/nostr-context-provider";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import { getLocalStorageData } from "@/utils/nostr/nostr-helper-functions";
 import MintButton from "@/components/wallet/mint-button";
 import ReceiveButton from "@/components/wallet/receive-button";
@@ -20,7 +20,7 @@ interface StorefrontWalletProps {
 }
 
 export default function StorefrontWallet({ colors }: StorefrontWalletProps) {
-  const { isLoggedIn } = useContext(SignerContext);
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
   const router = useRouter();
 
   const [totalBalance, setTotalBalance] = useState(0);

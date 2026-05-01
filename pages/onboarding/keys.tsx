@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import {
   InformationCircleIcon,
@@ -12,8 +12,8 @@ import {
   generateKeys,
   setLocalStorageDataOnSignIn,
 } from "@/utils/nostr/nostr-helper-functions";
-import { RelaysContext } from "../../utils/context/context";
-import { SignerContext } from "@/components/utility-components/nostr-context-provider";
+import { useConfigStore } from "../../utils/stores/config-store";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import { NostrSigner } from "@/utils/nostr/signers/nostr-signer";
 import { NostrNSecSigner } from "@/utils/nostr/signers/nostr-nsec-signer";
 import FailureModal from "../../components/utility-components/failure-modal";
@@ -27,8 +27,13 @@ const Keys = () => {
   const [showPassphrase, setShowPassphrase] = useState(false);
   const [showFailureModal, setShowFailureModal] = useState(false);
 
-  const { newSigner } = useContext(SignerContext);
-  const relaysContext = useContext(RelaysContext);
+  const newSigner = useAuthStore((s) => s.newSigner);
+  const relaysContext = {
+    isLoading: useConfigStore((s) => s.isRelaysLoading),
+    relayList: useConfigStore((s) => s.relayList),
+    readRelayList: useConfigStore((s) => s.readRelayList),
+    writeRelayList: useConfigStore((s) => s.writeRelayList),
+  };
 
   const saveSigner = (signer: NostrSigner) => {
     if (

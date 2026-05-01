@@ -1,10 +1,11 @@
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import useNavigation from "@/components/hooks/use-navigation";
 import { Button, Image, useDisclosure } from "@heroui/react";
 import { Bars4Icon } from "@heroicons/react/24/outline";
 import { countNumberOfUnreadMessagesFromChatsContext } from "@/utils/messages/utils";
-import { ChatsContext, ShopMapContext } from "@/utils/context/context";
-import { SignerContext } from "@/components/utility-components/nostr-context-provider";
+import { useSocialStore } from "@/utils/stores/social-store";
+import { useMarketStore } from "@/utils/stores/market-store";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import { useRouter } from "next/router";
 import SignInModal from "./sign-in/SignInModal";
 import { ProfileWithDropdown } from "./utility-components/profile/profile-dropdown";
@@ -29,14 +30,15 @@ const TopNav = ({
   } = useNavigation();
   const router = useRouter();
 
-  const chatsContext = useContext(ChatsContext);
-  const shopMapContext = useContext(ShopMapContext);
+  const chatsMap = useSocialStore((s) => s.chatsMap);
+  const isChatsLoading = useSocialStore((s) => s.isChatsLoading);
+  const shopData = useMarketStore((s) => s.shopData);
 
   const [unreadMsgCount, setUnreadMsgCount] = useState(0);
   const [cartQuantity, setCartQuantity] = useState(0);
   const { isOpen, onOpen, onClose } = useDisclosure();
-  const { isLoggedIn: signedIn, pubkey: userPubkey } =
-    useContext(SignerContext);
+  const signedIn = useAuthStore((s) => s.isLoggedIn);
+  const userPubkey = useAuthStore((s) => s.pubkey);
 
   const [shopLogoURL, setShopLogoURL] = useState("");
   const [shopName, setShopName] = useState("");
@@ -68,12 +70,12 @@ const TopNav = ({
   useEffect(() => {
     const getUnreadMessages = async () => {
       const unreadMsgCount = await countNumberOfUnreadMessagesFromChatsContext(
-        chatsContext.chatsMap
+        chatsMap
       );
       setUnreadMsgCount(unreadMsgCount);
     };
     getUnreadMessages();
-  }, [chatsContext]);
+  }, [chatsMap, isChatsLoading]);
 
   useEffect(() => {
     const npub = router.pathname
@@ -81,11 +83,11 @@ const TopNav = ({
       .find((segment) => segment.includes("npub1"));
     if (
       npub &&
-      shopMapContext.shopData.has(npub) &&
-      typeof shopMapContext.shopData.get(npub) != "undefined"
+      shopData.has(npub) &&
+      typeof shopData.get(npub) != "undefined"
     ) {
       const shopProfile: ShopProfile | undefined =
-        shopMapContext.shopData.get(npub);
+        shopData.get(npub);
       if (shopProfile) {
         setShopLogoURL(shopProfile.content.ui.picture);
         setShopName(shopProfile.content.name);
@@ -93,11 +95,11 @@ const TopNav = ({
     } else if (
       router.pathname.includes("my-listings") &&
       userPubkey &&
-      shopMapContext.shopData.has(userPubkey) &&
-      typeof shopMapContext.shopData.get(userPubkey) != "undefined"
+      shopData.has(userPubkey) &&
+      typeof shopData.get(userPubkey) != "undefined"
     ) {
       const shopProfile: ShopProfile | undefined =
-        shopMapContext.shopData.get(userPubkey);
+        shopData.get(userPubkey);
       if (shopProfile) {
         setShopLogoURL(shopProfile.content.ui.picture);
         setShopName(shopProfile.content.name);
@@ -106,7 +108,7 @@ const TopNav = ({
       setShopLogoURL("");
       setShopName("");
     }
-  }, [router.pathname, shopMapContext, userPubkey]);
+  }, [router.pathname, shopData, userPubkey]);
 
   const handleRoute = (path: string) => {
     if (signedIn) {

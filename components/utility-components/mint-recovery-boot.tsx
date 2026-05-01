@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import {
   Mint as CashuMint,
   Wallet as CashuWallet,
@@ -13,10 +13,7 @@ import {
   getLocalStorageData,
   publishProofEvent,
 } from "@/utils/nostr/nostr-helper-functions";
-import {
-  NostrContext,
-  SignerContext,
-} from "@/components/utility-components/nostr-context-provider";
+import { useAuthStore } from "@/utils/stores/auth-store";
 
 /**
  * Mounted once near the root of the app. On first signer/nostr availability,
@@ -29,8 +26,10 @@ import {
  * pending.
  */
 export function MintRecoveryBoot(): null {
-  const { signer, isAuthStateResolved, isLoggedIn } = useContext(SignerContext);
-  const { nostr } = useContext(NostrContext);
+  const signer = useAuthStore((s) => s.signer);
+  const isAuthStateResolved = useAuthStore((s) => s.isAuthStateResolved);
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const nostr = useAuthStore((s) => s.nostr);
   const ranOnceRef = useRef(false);
 
   useEffect(() => {

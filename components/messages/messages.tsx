@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect } from "react";
 import { nip19 } from "nostr-tools";
 import { useRouter } from "next/router";
 import { Button, useDisclosure } from "@heroui/react";
@@ -10,17 +10,14 @@ import {
   decryptNpub,
   generateKeys,
 } from "@/utils/nostr/nostr-helper-functions";
-import { ChatsContext } from "../../utils/context/context";
+import { useSocialStore } from "@/utils/stores/social-store";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import ShopstrSpinner from "../utility-components/shopstr-spinner";
 import ChatPanel from "./chat-panel";
 import ChatButton from "./chat-button";
 import { NostrMessageEvent, ChatObject } from "../../utils/types/types";
 import { useKeyPress } from "@/utils/keypress-handler";
 import FailureModal from "../utility-components/failure-modal";
-import {
-  NostrContext,
-  SignerContext,
-} from "@/components/utility-components/nostr-context-provider";
 import SignInModal from "../sign-in/SignInModal";
 import { SHOPSTRBUTTONCLASSNAMES } from "@/utils/STATIC-VARIABLES";
 import { createNip98AuthorizationHeader } from "@/utils/nostr/nip98-auth";
@@ -28,7 +25,13 @@ import { createNip98AuthorizationHeader } from "@/utils/nostr/nip98-auth";
 const Messages = ({ isPayment }: { isPayment: boolean }) => {
   const router = useRouter();
   const { isOpen, onOpen, onClose } = useDisclosure();
-  const chatsContext = useContext(ChatsContext);
+  const chatsContext = {
+    chatsMap: useSocialStore((s) => s.chatsMap),
+    isLoading: useSocialStore((s) => s.isChatsLoading),
+    addNewlyCreatedMessageEvent: (msg: any, sent?: boolean) => useSocialStore.getState().addMessage(msg, sent),
+    markAllMessagesAsRead: async () => { useSocialStore.getState().markAllRead(); return [] as string[]; },
+    newOrderIds: useSocialStore((s) => s.newOrderIds),
+  };
   const arrowUpPressed = useKeyPress("ArrowUp");
   const arrowDownPressed = useKeyPress("ArrowDown");
   const escapePressed = useKeyPress("Escape");
@@ -41,8 +44,9 @@ const Messages = ({ isPayment }: { isPayment: boolean }) => {
 
   const [isChatsLoading, setIsChatsLoading] = useState(true);
   const [isSendingDMLoading, setIsSendingDMLoading] = useState(false);
-  const { signer, pubkey: userPubkey } = useContext(SignerContext);
-  const { nostr } = useContext(NostrContext);
+  const signer = useAuthStore((s) => s.signer);
+  const userPubkey = useAuthStore((s) => s.pubkey);
+  const nostr = useAuthStore((s) => s.nostr);
 
   const [isClient, setIsClient] = useState(false);
 

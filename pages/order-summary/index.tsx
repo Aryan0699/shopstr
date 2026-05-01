@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useContext } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/router";
 import { Button } from "@heroui/react";
 import StorefrontThemeWrapper from "@/components/storefront/storefront-theme-wrapper";
@@ -9,7 +9,7 @@ import {
   ChatBubbleLeftRightIcon,
 } from "@heroicons/react/24/outline";
 import { nip19 } from "nostr-tools";
-import { ProductContext } from "@/utils/context/context";
+import { useMarketStore } from "@/utils/stores/market-store";
 import parseTags, {
   ProductData,
 } from "@/utils/parsers/product-parser-functions";
@@ -57,7 +57,10 @@ export default function OrderSummary() {
   const [latestProducts, setLatestProducts] = useState<ProductData[]>([]);
   const [sfSellerPubkey, setSfSellerPubkey] = useState("");
   const [sfShopSlug, setSfShopSlug] = useState("");
-  const productContext = useContext(ProductContext);
+  const productContext = {
+    productEvents: useMarketStore((s) => s.productEvents),
+    isLoading: useMarketStore((s) => s.isProductsLoading),
+  };
 
   useEffect(() => {
     if (typeof window !== "undefined") {

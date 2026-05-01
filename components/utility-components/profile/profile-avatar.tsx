@@ -1,7 +1,7 @@
-import { ProfileMapContext } from "@/utils/context/context";
+import { useMarketStore } from "@/utils/stores/market-store";
 import { User } from "@heroui/react";
 import { nip19 } from "nostr-tools";
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 export const ProfileAvatar = ({
   pubkey,
@@ -19,7 +19,7 @@ export const ProfileAvatar = ({
   const [pfp, setPfp] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [isNip05Verified, setIsNip05Verified] = useState(false);
-  const profileContext = useContext(ProfileMapContext);
+  const profileContext = { profileData: useMarketStore((s) => s.profileData) };
   const npub = pubkey ? nip19.npubEncode(pubkey) : "";
   useEffect(() => {
     const profileMap = profileContext.profileData;

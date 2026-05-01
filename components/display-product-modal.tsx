@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { useState } from "react";
 import {
   PencilSquareIcon,
   ShareIcon,
@@ -22,11 +22,11 @@ import { SHOPSTRBUTTONCLASSNAMES } from "@/utils/STATIC-VARIABLES";
 import ConfirmActionDropdown from "./utility-components/dropdowns/confirm-action-dropdown";
 import { ProfileWithDropdown } from "./utility-components/profile/profile-dropdown";
 import SuccessModal from "./utility-components/success-modal";
-import { SignerContext } from "@/components/utility-components/nostr-context-provider";
+import { useAuthStore } from "@/utils/stores/auth-store";
+import { useMarketStore } from "@/utils/stores/market-store";
 import parseTags, {
   ProductData,
 } from "@/utils/parsers/product-parser-functions";
-import { ProductContext } from "@/utils/context/context";
 import { getListingSlug } from "@/utils/url-slugs";
 import { NostrEvent } from "@/utils/types/types";
 
@@ -43,8 +43,14 @@ export default function DisplayProductModal({
   handleModalToggle,
   handleDelete,
 }: ProductModalProps) {
-  const { pubkey: userPubkey, isLoggedIn } = useContext(SignerContext);
-  const productEventContext = useContext(ProductContext);
+  const userPubkey = useAuthStore((s) => s.pubkey);
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const productEventContext = {
+    productEvents: useMarketStore((s) => s.productEvents),
+    isLoading: useMarketStore((s) => s.isProductsLoading),
+    addNewlyCreatedProductEvent: useMarketStore.getState().addProduct,
+    removeDeletedProductEvent: useMarketStore.getState().removeProduct,
+  };
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [showProductForm, setShowProductForm] = useState(false);
 

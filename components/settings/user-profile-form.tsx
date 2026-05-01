@@ -1,4 +1,4 @@
-import { useEffect, useState, useContext, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/router";
 import { useForm, Controller } from "react-hook-form";
 import {
@@ -9,12 +9,9 @@ import {
   SelectItem,
   Tooltip,
 } from "@heroui/react";
-import { ProfileMapContext } from "@/utils/context/context";
+import { useMarketStore } from "@/utils/stores/market-store";
 import { SHOPSTRBUTTONCLASSNAMES } from "@/utils/STATIC-VARIABLES";
-import {
-  SignerContext,
-  NostrContext,
-} from "@/components/utility-components/nostr-context-provider";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import { NostrNSecSigner } from "@/utils/nostr/signers/nostr-nsec-signer";
 import {
   createNostrProfileEvent,
@@ -31,7 +28,7 @@ interface UserProfileFormProps {
 
 const UserProfileForm = ({ isOnboarding }: UserProfileFormProps) => {
   const router = useRouter();
-  const { nostr } = useContext(NostrContext);
+  const nostr = useAuthStore((s) => s.nostr);
   const [isUploadingProfile, setIsUploadingProfile] = useState(false);
   const [isFetchingProfile, setIsFetchingProfile] = useState(false);
   const [isNPubCopied, setIsNPubCopied] = useState(false);
@@ -42,13 +39,14 @@ const UserProfileForm = ({ isOnboarding }: UserProfileFormProps) => {
   const [userNcryptsec, setUserNcryptsec] = useState("");
   const [userNSec, setUserNSec] = useState("");
 
-  const {
-    signer,
-    pubkey: userPubkey,
-    npub: userNPub,
-  } = useContext(SignerContext);
+  const signer = useAuthStore((s) => s.signer);
+  const userPubkey = useAuthStore((s) => s.pubkey);
+  const userNPub = useAuthStore((s) => s.npub);
 
-  const profileContext = useContext(ProfileMapContext);
+  const profileContext = {
+    profileData: useMarketStore((s) => s.profileData),
+    updateProfileData: useMarketStore.getState().updateProfile,
+  };
   const { handleSubmit, control, reset, watch, setValue } = useForm({
     defaultValues: {
       banner: "",

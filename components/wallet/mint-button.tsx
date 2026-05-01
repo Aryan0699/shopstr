@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import {
   BanknotesIcon,
@@ -28,10 +28,7 @@ import {
 import { Mint as CashuMint, Wallet as CashuWallet } from "@cashu/cashu-ts";
 import QRCode from "qrcode";
 import FailureModal from "@/components/utility-components/failure-modal";
-import {
-  NostrContext,
-  SignerContext,
-} from "@/components/utility-components/nostr-context-provider";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import { NostrNIP46Signer } from "@/utils/nostr/signers/nostr-nip46-signer";
 import {
   MintOperationError,
@@ -56,8 +53,8 @@ const MintButton = () => {
   const [showFailureModal, setShowFailureModal] = useState(false);
   const [failureText, setFailureText] = useState("");
 
-  const { signer } = useContext(SignerContext);
-  const { nostr } = useContext(NostrContext);
+  const signer = useAuthStore((s) => s.signer);
+  const nostr = useAuthStore((s) => s.nostr);
 
   const { mints, tokens, history } = getLocalStorageData();
 

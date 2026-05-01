@@ -1,6 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 
-import { useEffect, useState, useContext } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
 import {
@@ -26,7 +26,7 @@ import { ProductData } from "@/utils/parsers/product-parser-functions";
 import CartInvoiceCard from "../../components/cart-invoice-card";
 import { getSatoshiValue } from "@getalby/lightning-tools";
 import currencySelection from "../../public/currencySelection.json";
-import { ShopMapContext, ProfileMapContext } from "@/utils/context/context";
+import { useMarketStore } from "@/utils/stores/market-store";
 import { nip19 } from "nostr-tools";
 import StorefrontThemeWrapper from "@/components/storefront/storefront-theme-wrapper";
 import ProtectedRoute from "@/components/utility-components/protected-route";
@@ -82,8 +82,8 @@ function QuantitySelector({
 }
 
 export default function Component() {
-  const shopContext = useContext(ShopMapContext);
-  const profileContext = useContext(ProfileMapContext);
+  const shopContext = { shopData: useMarketStore((s) => s.shopData) };
+  const profileContext = { profileData: useMarketStore((s) => s.profileData) };
 
   const [products, setProducts] = useState<ProductData[]>([]);
   const [satPrices, setSatPrices] = useState<{ [key: string]: number | null }>(

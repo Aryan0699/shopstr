@@ -1,9 +1,8 @@
-import { useCallback, useContext, useState, useEffect, useRef } from "react";
-import {
-  CashuWalletContext,
-  ChatsContext,
-  ProfileMapContext,
-} from "../utils/context/context";
+import { useCallback, useState, useEffect, useRef } from "react";
+import { useWalletStore } from "@/utils/stores/wallet-store";
+import { useSocialStore } from "@/utils/stores/social-store";
+import { useMarketStore } from "@/utils/stores/market-store";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import { useForm } from "react-hook-form";
 import {
   Button,
@@ -64,10 +63,6 @@ import SignInModal from "./sign-in/SignInModal";
 import currencySelection from "../public/currencySelection.json";
 import FailureModal from "@/components/utility-components/failure-modal";
 import CountryDropdown from "./utility-components/dropdowns/country-dropdown";
-import {
-  NostrContext,
-  SignerContext,
-} from "@/components/utility-components/nostr-context-provider";
 import { ShippingFormData, ContactFormData } from "@/utils/types/types";
 import { Controller } from "react-hook-form";
 
@@ -101,19 +96,27 @@ export default function ProductInvoiceCard({
   originalPrice?: number;
 }) {
   const { mints, tokens, history } = getLocalStorageData();
-  const {
-    pubkey: userPubkey,
-    npub: userNPub,
-    isLoggedIn,
-    signer,
-  } = useContext(SignerContext);
+  const userPubkey = useAuthStore((s) => s.pubkey);
+  const userNPub = useAuthStore((s) => s.npub);
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const signer = useAuthStore((s) => s.signer);
 
   // Check if there are tokens available for Cashu payment
   const hasTokensAvailable = tokens && tokens.length > 0;
-  const chatsContext = useContext(ChatsContext);
-  const profileContext = useContext(ProfileMapContext);
+  const chatsContext = {
+    chatsMap: useSocialStore((s) => s.chatsMap),
+    isLoading: useSocialStore((s) => s.isChatsLoading),
+    addNewlyCreatedMessageEvent: (msg: any, sent?: boolean) => useSocialStore.getState().addMessage(msg, sent),
+    markAllMessagesAsRead: async () => { useSocialStore.getState().markAllRead(); return [] as string[]; },
+    newOrderIds: useSocialStore((s) => s.newOrderIds),
+  };
+  const profileContext = {
+    profileData: useMarketStore((s) => s.profileData),
+    isLoading: useMarketStore((s) => s.isProfilesLoading),
+    updateProfileData: useMarketStore.getState().updateProfile,
+  };
 
-  const { nostr } = useContext(NostrContext);
+  const nostr = useAuthStore((s) => s.nostr);
 
   const [showInvoiceCard, setShowInvoiceCard] = useState(false);
 
@@ -169,7 +172,12 @@ export default function ProductInvoiceCard({
     selectedBulkOption?: number;
   } | null>(null);
 
-  const walletContext = useContext(CashuWalletContext);
+  const walletContext = {
+    proofEvents: useWalletStore((s) => s.proofEvents),
+    cashuMints: useWalletStore((s) => s.cashuMints),
+    cashuProofs: useWalletStore((s) => s.cashuProofs),
+    isLoading: useWalletStore((s) => s.isWalletLoading),
+  };
 
   const [randomNpubForSender, setRandomNpubForSender] = useState<string>("");
   const [randomNsecForSender, setRandomNsecForSender] = useState<string>("");

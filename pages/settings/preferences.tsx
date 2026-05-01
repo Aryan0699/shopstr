@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect } from "react";
 import { useForm, Controller } from "react-hook-form";
 import Link from "next/link";
 import {
@@ -28,14 +28,11 @@ import { useTheme } from "next-themes";
 import { SettingsBreadCrumbs } from "@/components/settings/settings-bread-crumbs";
 import ShopstrSlider from "../../components/utility-components/shopstr-slider";
 import FailureModal from "../../components/utility-components/failure-modal";
-import {
-  NostrContext,
-  SignerContext,
-} from "@/components/utility-components/nostr-context-provider";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import ProtectedRoute from "@/components/utility-components/protected-route";
 
 const PreferencesPage = () => {
-  const { nostr } = useContext(NostrContext);
+  const nostr = useAuthStore((s) => s.nostr);
   const [relays, setRelays] = useState(Array<string>(0));
   const [readRelays, setReadRelays] = useState(Array<string>(0));
   const [writeRelays, setWriteRelays] = useState(Array<string>(0));
@@ -54,7 +51,7 @@ const PreferencesPage = () => {
   const [showMintModal, setShowMintModal] = useState(false);
 
   const [isLoaded, setIsLoaded] = useState(false);
-  const { signer } = useContext(SignerContext);
+  const signer = useAuthStore((s) => s.signer);
 
   const [showFailureModal, setShowFailureModal] = useState(false);
   const [failureText, setFailureText] = useState("");

@@ -1,5 +1,6 @@
 import { LogOut } from "@/utils/nostr/nostr-helper-functions";
-import { ProfileMapContext, ShopMapContext } from "@/utils/context/context";
+import { useMarketStore } from "@/utils/stores/market-store";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import {
   Dropdown,
   DropdownItem,
@@ -10,7 +11,7 @@ import {
   useDisclosure,
 } from "@heroui/react";
 import { nip19 } from "nostr-tools";
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { getProfileSlug } from "@/utils/url-slugs";
 import {
   ArrowRightStartOnRectangleIcon,
@@ -23,7 +24,6 @@ import {
   UserIcon,
 } from "@heroicons/react/24/outline";
 import { useRouter } from "next/router";
-import { SignerContext } from "@/components/utility-components/nostr-context-provider";
 import SignInModal from "../../sign-in/SignInModal";
 import { ProfileData } from "@/utils/types/types";
 
@@ -95,11 +95,13 @@ export const ProfileWithDropdown = ({
   >(null);
   const [isNPubCopied, setIsNPubCopied] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const profileContext = useContext(ProfileMapContext);
-  const shopMapContext = useContext(ShopMapContext);
+  const profileData = useMarketStore((s) => s.profileData);
+  const shopData = useMarketStore((s) => s.shopData);
+  const profileContext = { profileData, isLoading: useMarketStore((s) => s.isProfilesLoading), updateProfileData: useMarketStore.getState().updateProfile };
+  const shopMapContext = { shopData, isLoading: useMarketStore((s) => s.isShopsLoading) };
   const npub = pubkey ? nip19.npubEncode(pubkey) : "";
   const router = useRouter();
-  const { isLoggedIn } = useContext(SignerContext);
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
   const { isOpen, onOpen, onClose } = useDisclosure();
 
   const handleDropdownAction = (action: () => void) => {

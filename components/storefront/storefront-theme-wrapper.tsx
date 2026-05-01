@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Head from "next/head";
 import { useRouter } from "next/router";
 import { useDisclosure } from "@heroui/react";
@@ -7,8 +7,8 @@ import {
   Bars3Icon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
-import { ShopMapContext, ProfileMapContext } from "@/utils/context/context";
-import { SignerContext } from "@/components/utility-components/nostr-context-provider";
+import { useMarketStore } from "@/utils/stores/market-store";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import { ProfileWithDropdown } from "@/components/utility-components/profile/profile-dropdown";
 import SignInModal from "@/components/sign-in/SignInModal";
 import {
@@ -54,9 +54,10 @@ export default function StorefrontThemeWrapper({
   sellerPubkey,
   children,
 }: StorefrontThemeWrapperProps) {
-  const shopMapContext = useContext(ShopMapContext);
-  const profileContext = useContext(ProfileMapContext);
-  const { isLoggedIn, pubkey: userPubkey } = useContext(SignerContext);
+  const shopMapContext = { shopData: useMarketStore((s) => s.shopData) };
+  const profileContext = { profileData: useMarketStore((s) => s.profileData) };
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const userPubkey = useAuthStore((s) => s.pubkey);
   const router = useRouter();
   const { isOpen, onOpen, onClose } = useDisclosure();
 

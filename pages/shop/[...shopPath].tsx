@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, useContext } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/router";
-import { ShopMapContext } from "@/utils/context/context";
+import { useMarketStore } from "@/utils/stores/market-store";
 import StorefrontLayout from "@/components/storefront/storefront-layout";
 import ShopstrSpinner from "@/components/utility-components/shopstr-spinner";
 import { GetServerSideProps } from "next";
@@ -62,7 +62,10 @@ export const getServerSideProps: GetServerSideProps<ShopSubPageProps> = async (
 export default function ShopSubPage() {
   const router = useRouter();
   const { shopPath } = router.query;
-  const shopMapContext = useContext(ShopMapContext);
+  const shopMapContext = {
+    shopData: useMarketStore((s) => s.shopData),
+    isLoading: useMarketStore((s) => s.isShopsLoading),
+  };
   const [shopPubkey, setShopPubkey] = useState<string>("");
   const [initialShopConfig, setInitialShopConfig] = useState<Record<
     string,

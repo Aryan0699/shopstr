@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Modal,
   ModalContent,
@@ -14,7 +14,9 @@ import {
   XCircleIcon,
 } from "@heroicons/react/24/outline";
 import { useTheme } from "next-themes";
-import { ProfileMapContext, ChatsContext } from "../../utils/context/context";
+import { useMarketStore } from "@/utils/stores/market-store";
+import { useSocialStore } from "@/utils/stores/social-store";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import {
   generateKeys,
   getLocalStorageData,
@@ -38,17 +40,17 @@ import {
 import { safeMeltProofs } from "@/utils/cashu/melt-retry-service";
 import { safeSwap } from "@/utils/cashu/swap-retry-service";
 import { formatWithCommas } from "./display-monetary-info";
-import {
-  NostrContext,
-  SignerContext,
-} from "@/components/utility-components/nostr-context-provider";
+
 
 export default function ClaimButton({ token }: { token: string }) {
   const [lnurl, setLnurl] = useState("");
-  const profileContext = useContext(ProfileMapContext);
-  const chatsContext = useContext(ChatsContext);
-  const { signer, pubkey: userPubkey } = useContext(SignerContext);
-  const { nostr } = useContext(NostrContext);
+  const profileContext = { profileData: useMarketStore((s) => s.profileData) };
+  const chatsContext = {
+    addNewlyCreatedMessageEvent: (msg: any, sent?: boolean) => useSocialStore.getState().addMessage(msg, sent),
+  };
+  const signer = useAuthStore((s) => s.signer);
+  const userPubkey = useAuthStore((s) => s.pubkey);
+  const nostr = useAuthStore((s) => s.nostr);
 
   const [openClaimTypeModal, setOpenClaimTypeModal] = useState(false);
   const [openRedemptionModal, setOpenRedemptionModal] = useState(false);

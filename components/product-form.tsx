@@ -1,4 +1,4 @@
-import { useEffect, useState, useContext } from "react";
+import { useEffect, useState } from "react";
 import CryptoJS from "crypto-js";
 import { useRouter } from "next/router";
 import { useForm, Controller } from "react-hook-form";
@@ -39,7 +39,8 @@ import {
 } from "@/utils/nostr/nostr-helper-functions";
 import LocationDropdown from "./utility-components/dropdowns/location-dropdown";
 import ConfirmActionDropdown from "./utility-components/dropdowns/confirm-action-dropdown";
-import { ProductContext, ProfileMapContext } from "../utils/context/context";
+import { useMarketStore } from "@/utils/stores/market-store";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import { ProductData } from "@/utils/parsers/product-parser-functions";
 import {
   formatCurrentDateTimeLocalValue,
@@ -48,10 +49,6 @@ import {
 import { buildSrcSet } from "@/utils/images";
 import { FileUploaderButton } from "./utility-components/file-uploader";
 import currencySelection from "../public/currencySelection.json";
-import {
-  NostrContext,
-  SignerContext,
-} from "@/components/utility-components/nostr-context-provider";
 import { ProductFormValues } from "../utils/types/types";
 import { useTheme } from "next-themes";
 
@@ -82,14 +79,21 @@ export default function ProductForm({
     useState(false);
   const [showOptionalTags, setShowOptionalTags] = useState(false);
   const [isFlashSale, setIsFlashSale] = useState(false);
-  const productEventContext = useContext(ProductContext);
-  const profileContext = useContext(ProfileMapContext);
-  const {
-    signer,
-    isLoggedIn,
-    pubkey: signerPubKey,
-  } = useContext(SignerContext);
-  const { nostr } = useContext(NostrContext);
+  const productEventContext = {
+    productEvents: useMarketStore((s) => s.productEvents),
+    isLoading: useMarketStore((s) => s.isProductsLoading),
+    addNewlyCreatedProductEvent: useMarketStore.getState().addProduct,
+    removeDeletedProductEvent: useMarketStore.getState().removeProduct,
+  };
+  const profileContext = {
+    profileData: useMarketStore((s) => s.profileData),
+    isLoading: useMarketStore((s) => s.isProfilesLoading),
+    updateProfileData: useMarketStore.getState().updateProfile,
+  };
+  const signer = useAuthStore((s) => s.signer);
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const signerPubKey = useAuthStore((s) => s.pubkey);
+  const nostr = useAuthStore((s) => s.nostr);
 
   const { handleSubmit, control, reset, watch } = useForm({
     defaultValues: oldValues

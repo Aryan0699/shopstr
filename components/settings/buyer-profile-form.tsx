@@ -1,13 +1,10 @@
-import { useEffect, useState, useContext, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/router";
 import { useForm, Controller } from "react-hook-form";
 import { Button, Input, Image } from "@heroui/react";
-import { ProfileMapContext } from "@/utils/context/context";
+import { useMarketStore } from "@/utils/stores/market-store";
 import { SHOPSTRBUTTONCLASSNAMES } from "@/utils/STATIC-VARIABLES";
-import {
-  SignerContext,
-  NostrContext,
-} from "@/components/utility-components/nostr-context-provider";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import { createNostrProfileEvent } from "@/utils/nostr/nostr-helper-functions";
 import { FileUploaderButton } from "@/components/utility-components/file-uploader";
 import ShopstrSpinner from "@/components/utility-components/shopstr-spinner";
@@ -18,14 +15,18 @@ interface BuyerProfileFormProps {
 
 const BuyerProfileForm = ({ isOnboarding }: BuyerProfileFormProps) => {
   const router = useRouter();
-  const { nostr } = useContext(NostrContext);
+  const nostr = useAuthStore((s) => s.nostr);
   const [isUploadingProfile, setIsUploadingProfile] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isFetchingProfile, setIsFetchingProfile] = useState(false);
 
-  const { signer, pubkey: userPubkey } = useContext(SignerContext);
+  const signer = useAuthStore((s) => s.signer);
+  const userPubkey = useAuthStore((s) => s.pubkey);
 
-  const profileContext = useContext(ProfileMapContext);
+  const profileContext = {
+    profileData: useMarketStore((s) => s.profileData),
+    updateProfileData: useMarketStore.getState().updateProfile,
+  };
   const { handleSubmit, control, reset, watch, setValue } = useForm({
     defaultValues: {
       picture: "",

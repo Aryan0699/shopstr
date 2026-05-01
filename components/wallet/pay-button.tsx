@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { useTheme } from "next-themes";
 import {
@@ -31,11 +31,8 @@ import {
 import { safeMeltProofs } from "@/utils/cashu/melt-retry-service";
 import { safeSwap } from "@/utils/cashu/swap-retry-service";
 import { formatWithCommas } from "../utility-components/display-monetary-info";
-import { CashuWalletContext } from "../../utils/context/context";
-import {
-  NostrContext,
-  SignerContext,
-} from "@/components/utility-components/nostr-context-provider";
+import { useWalletStore } from "@/utils/stores/wallet-store";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import { NostrNIP46Signer } from "@/utils/nostr/signers/nostr-nip46-signer";
 
 const PayButton = () => {
@@ -47,14 +44,14 @@ const PayButton = () => {
   // const [totalAmount, setTotalAmount] = useState(0);
   const [feeReserveAmount, setFeeReserveAmount] = useState("");
 
-  const { signer } = useContext(SignerContext);
-  const { nostr } = useContext(NostrContext);
+  const signer = useAuthStore((s) => s.signer);
+  const nostr = useAuthStore((s) => s.nostr);
 
   const { mints, tokens, history } = getLocalStorageData();
 
   const { theme } = useTheme();
 
-  const walletContext = useContext(CashuWalletContext);
+  const walletContext = { proofEvents: useWalletStore((s) => s.proofEvents) };
 
   const {
     handleSubmit: handlePaySubmit,

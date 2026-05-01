@@ -24,19 +24,14 @@ import {
 } from "@heroicons/react/24/outline";
 import { useRouter } from "next/router";
 import { nip19, Event } from "nostr-tools";
-import { useContext, useEffect, useState, useRef } from "react";
-import {
-  ReviewsContext,
-  ShopMapContext,
-  FollowsContext,
-  ProductContext,
-  ProfileMapContext,
-} from "@/utils/context/context";
+import { useEffect, useState, useRef } from "react";
+import { useMarketStore } from "@/utils/stores/market-store";
+import { useSocialStore } from "@/utils/stores/social-store";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import DisplayProducts from "../display-products";
 import LocationDropdown from "../utility-components/dropdowns/location-dropdown";
 import { ProfileWithDropdown } from "@/components/utility-components/profile/profile-dropdown";
 import { CATEGORIES, SHOPSTRBUTTONCLASSNAMES } from "@/utils/STATIC-VARIABLES";
-import { SignerContext } from "@/components/utility-components/nostr-context-provider";
 import parseTags, {
   ProductData,
 } from "@/utils/parsers/product-parser-functions";
@@ -118,14 +113,37 @@ function MarketplacePage({
 
   const [categories, setCategories] = useState([""]);
 
-  const reviewsContext = useContext(ReviewsContext);
-  const shopMapContext = useContext(ShopMapContext);
-  const followsContext = useContext(FollowsContext);
-  const productEventContext = useContext(ProductContext);
-  const profileMapContext = useContext(ProfileMapContext);
+  const reviewsContext = {
+    merchantReviewsData: useMarketStore((s) => s.merchantReviewsData),
+    productReviewsData: useMarketStore((s) => s.productReviewsData),
+    isLoading: useMarketStore((s) => s.isReviewsLoading),
+    updateMerchantReviewsData: useMarketStore.getState().updateMerchantReview,
+    updateProductReviewsData: useMarketStore.getState().updateProductReview,
+  };
+  const shopMapContext = {
+    shopData: useMarketStore((s) => s.shopData),
+    isLoading: useMarketStore((s) => s.isShopsLoading),
+    updateShopData: useMarketStore.getState().updateShop,
+  };
+  const followsContext = {
+    followList: useSocialStore((s) => s.followList),
+    firstDegreeFollowsLength: useSocialStore((s) => s.firstDegreeFollowsLength),
+    isLoading: useSocialStore((s) => s.isFollowsLoading),
+  };
+  const productEventContext = {
+    productEvents: useMarketStore((s) => s.productEvents),
+    isLoading: useMarketStore((s) => s.isProductsLoading),
+    addNewlyCreatedProductEvent: useMarketStore.getState().addProduct,
+    removeDeletedProductEvent: useMarketStore.getState().removeProduct,
+  };
+  const profileMapContext = {
+    profileData: useMarketStore((s) => s.profileData),
+    isLoading: useMarketStore((s) => s.isProfilesLoading),
+    updateProfileData: useMarketStore.getState().updateProfile,
+  };
 
-  const { pubkey: userPubkey, isLoggedIn: loggedIn } =
-    useContext(SignerContext);
+  const userPubkey = useAuthStore((s) => s.pubkey);
+  const loggedIn = useAuthStore((s) => s.isLoggedIn);
 
   const searchBarRef = useRef<HTMLDivElement>(null);
 

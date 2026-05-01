@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/router";
 import {
   Modal,
@@ -18,7 +18,7 @@ import parseTags, {
 import { parseZapsnagNote } from "@/utils/parsers/zapsnag-parser";
 import CheckoutCard from "../../components/utility-components/checkout-card";
 import ZapsnagButton from "../../components/ZapsnagButton";
-import { ProductContext } from "../../utils/context/context";
+import { useMarketStore } from "../../utils/stores/market-store";
 import { nip19 } from "nostr-tools";
 import {
   RawEventModal,
@@ -216,7 +216,10 @@ const Listing = ({ initialProductEvent }: ListingPageProps) => {
     return () => clearTimeout(timer);
   }, [invoiceIsPaid, cashuPaymentSent, router]);
 
-  const productContext = useContext(ProductContext);
+  const productContext = {
+    productEvents: useMarketStore((s) => s.productEvents),
+    isLoading: useMarketStore((s) => s.isProductsLoading),
+  };
 
   useEffect(() => {
     if (typeof window !== "undefined") {

@@ -1,6 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 
-import { useContext, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Event, nip19 } from "nostr-tools";
 import parseTags, {
   ProductData,
@@ -29,17 +29,13 @@ import {
   ArrowLongUpIcon,
   EllipsisVerticalIcon,
 } from "@heroicons/react/24/outline";
-import {
-  ReviewsContext,
-  ProductContext,
-  ShopMapContext,
-} from "@/utils/context/context";
+import { useMarketStore } from "@/utils/stores/market-store";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import FreeShippingNotification from "../free-shipping-notification";
 import FailureModal from "../utility-components/failure-modal";
 import SuccessModal from "../utility-components/success-modal";
 import SignInModal from "../sign-in/SignInModal";
 import currencySelection from "../../public/currencySelection.json";
-import { SignerContext } from "@/components/utility-components/nostr-context-provider";
 import VolumeSelector from "./volume-selector";
 import WeightSelector from "./weight-selector";
 import BulkSelector from "./bulk-selector";
@@ -67,9 +63,15 @@ export default function CheckoutCard({
   uniqueKey?: string;
   rawEvent?: Event;
 }) {
-  const { pubkey: userPubkey, isLoggedIn } = useContext(SignerContext);
-  const productEventContext = useContext(ProductContext);
-  const shopMapContext = useContext(ShopMapContext);
+  const userPubkey = useAuthStore((s) => s.pubkey);
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const productEventContext = {
+    productEvents: useMarketStore((s) => s.productEvents),
+    isLoading: useMarketStore((s) => s.isProductsLoading),
+    addNewlyCreatedProductEvent: useMarketStore.getState().addProduct,
+    removeDeletedProductEvent: useMarketStore.getState().removeProduct,
+  };
+  const shopMapContext = { shopData: useMarketStore((s) => s.shopData) };
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [showFreeShippingNotification, setShowFreeShippingNotification] =
     useState(false);
@@ -109,7 +111,13 @@ export default function CheckoutCard({
   const [appliedDiscount, setAppliedDiscount] = useState<number>(0);
   const [discountError, setDiscountError] = useState("");
 
-  const reviewsContext = useContext(ReviewsContext);
+  const reviewsContext = {
+    merchantReviewsData: useMarketStore((s) => s.merchantReviewsData),
+    productReviewsData: useMarketStore((s) => s.productReviewsData),
+    isLoading: useMarketStore((s) => s.isReviewsLoading),
+    updateMerchantReviewsData: useMarketStore.getState().updateMerchantReview,
+    updateProductReviewsData: useMarketStore.getState().updateProductReview,
+  };
 
   const hasVolumes = productData.volumes && productData.volumes.length > 0;
   const hasWeights = productData.weights && productData.weights.length > 0;

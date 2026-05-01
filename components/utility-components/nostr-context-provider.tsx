@@ -1,5 +1,4 @@
 import {
-  createContext,
   useCallback,
   useEffect,
   useRef,
@@ -20,33 +19,13 @@ import { NostrNIP46Signer } from "@/utils/nostr/signers/nostr-nip46-signer";
 import { NostrNSecSigner } from "@/utils/nostr/signers/nostr-nsec-signer";
 import { needsMigration } from "@/utils/nostr/encryption-migration";
 import MigrationPromptModal from "./migration-prompt-modal";
+import { useAuthStore } from "@/utils/stores/auth-store";
 
-interface SignerContextInterface {
-  signer?: NostrSigner;
-  isLoggedIn?: boolean;
-  isAuthStateResolved?: boolean;
-  pubkey?: string;
-  npub?: string;
-  newSigner?: (type: string, args: any) => NostrSigner;
-}
-
-export const SignerContext = createContext({
-  signer: {} as NostrSigner,
-  isLoggedIn: false,
-  isAuthStateResolved: false,
-  pubkey: "",
-  npub: "",
-  newSigner: {},
-} as SignerContextInterface);
-
-interface NostrContextInterface {
-  nostr?: NostrManager;
-}
-
-export const NostrContext = createContext({
-  nostr: {} as NostrManager,
-} as NostrContextInterface);
-
+/**
+ * SignerContextProvider — now uses useAuthStore instead of React Context.
+ * Still renders as a wrapper component because it manages auth modals
+ * (passphrase, auth URL, migration) that need to be in the React tree.
+ */
 export function SignerContextProvider({ children }: { children: ReactNode }) {
   const [isPassphraseRequested, setIsPassphraseRequested] = useState(false);
   const [isAuthChallengeRequested, setIsAuthChallengeRequested] =
@@ -57,15 +36,15 @@ export function SignerContextProvider({ children }: { children: ReactNode }) {
     ((res: any) => void) | undefined
   >(undefined);
 
-  const [signer, setSigner] = useState<NostrSigner | undefined>(undefined);
   const [error, setError] = useState<Error | undefined>(undefined);
   const [abort, setAbort] = useState<() => void>(() => {});
-  const [pubkey, setPubKey] = useState<string | undefined>(undefined);
-  const [npub, setNPub] = useState<string | undefined>(undefined);
-  const [isAuthStateResolved, setIsAuthStateResolved] = useState(false);
   const [showMigrationModal, setShowMigrationModal] = useState(false);
-  const isLoggedIn = !!(signer && pubkey);
   const lastSuccessfulSignerKeyRef = useRef<string>("");
+
+  // Read store state for isLoggedIn check
+  const signer = useAuthStore((s) => s.signer);
+  const pubkey = useAuthStore((s) => s.pubkey);
+  const isLoggedIn = !!(signer && pubkey);
 
   const challengeHandler: ChallengeHandler = (
     type,
@@ -107,19 +86,19 @@ export function SignerContextProvider({ children }: { children: ReactNode }) {
 
   const loadKeys = async (signerObject: NostrSigner) => {
     try {
-      const pubkey = await signerObject.getPubKey();
-      const npub = nip19.npubEncode(pubkey);
-      setPubKey(pubkey);
-      setNPub(npub);
+      const pk = await signerObject.getPubKey();
+      const np = nip19.npubEncode(pk);
+      useAuthStore.getState().setPubkey(pk);
+      useAuthStore.getState().setNpub(np);
       setIsPassphraseRequested(false);
     } catch (error) {
       if (error instanceof Error && error.message.includes("passphrase")) {
         setIsPassphraseRequested(true);
       }
-      setPubKey(undefined);
-      setNPub(undefined);
+      useAuthStore.getState().setPubkey(undefined);
+      useAuthStore.getState().setNpub(undefined);
     } finally {
-      setIsAuthStateResolved(true);
+      useAuthStore.getState().setIsAuthStateResolved(true);
     }
   };
 
@@ -169,10 +148,10 @@ export function SignerContextProvider({ children }: { children: ReactNode }) {
       }
     } else {
       lastSuccessfulSignerKeyRef.current = "";
-      setSigner(undefined);
-      setPubKey(undefined);
-      setNPub(undefined);
-      setIsAuthStateResolved(true);
+      useAuthStore.getState().setSigner(undefined);
+      useAuthStore.getState().setPubkey(undefined);
+      useAuthStore.getState().setNpub(undefined);
+      useAuthStore.getState().setIsAuthStateResolved(true);
       return;
     }
 
@@ -181,7 +160,7 @@ export function SignerContextProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    setIsAuthStateResolved(false);
+    useAuthStore.getState().setIsAuthStateResolved(false);
 
     let signerObject: NostrSigner;
     try {
@@ -192,10 +171,10 @@ export function SignerContextProvider({ children }: { children: ReactNode }) {
       if (isExtension && retryCount < 10) {
         setTimeout(() => loadSigner(retryCount + 1), 500);
       } else {
-        setSigner(undefined);
-        setPubKey(undefined);
-        setNPub(undefined);
-        setIsAuthStateResolved(true);
+        useAuthStore.getState().setSigner(undefined);
+        useAuthStore.getState().setPubkey(undefined);
+        useAuthStore.getState().setNpub(undefined);
+        useAuthStore.getState().setIsAuthStateResolved(true);
       }
       return;
     }
@@ -203,7 +182,7 @@ export function SignerContextProvider({ children }: { children: ReactNode }) {
     if (!signerObject) return;
 
     lastSuccessfulSignerKeyRef.current = signerKey;
-    setSigner(signerObject);
+    useAuthStore.getState().setSigner(signerObject);
     loadKeys(signerObject);
 
     const isAlreadyLoaded = localStorage.getItem("signer");
@@ -249,6 +228,7 @@ export function SignerContextProvider({ children }: { children: ReactNode }) {
     return undefined;
   }, [isLoggedIn]);
 
+  // Set the newSigner factory on the store
   const newSigner = useCallback((type: string, args: any) => {
     switch (type.toLowerCase()) {
       case "nip46": {
@@ -264,62 +244,65 @@ export function SignerContextProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  useEffect(() => {
+    useAuthStore.getState().setNewSigner(newSigner);
+  }, [newSigner]);
+
   return (
     <>
-      <SignerContext.Provider
-        value={{
-          signer,
-          isLoggedIn,
-          isAuthStateResolved,
-          pubkey,
-          npub,
-          newSigner,
+      <PassphraseChallengeModal
+        actionOnSubmit={(passphrase: string, remind: boolean) => {
+          if (challengeResolver) {
+            challengeResolver({ res: passphrase, remind });
+            const currentSigner = useAuthStore.getState().signer;
+            if (currentSigner) loadKeys(currentSigner);
+          }
         }}
-      >
-        <PassphraseChallengeModal
-          actionOnSubmit={(passphrase: string, remind: boolean) => {
-            if (challengeResolver) {
-              challengeResolver({ res: passphrase, remind });
-              if (signer) loadKeys(signer);
-            }
-          }}
-          actionOnCancel={() => {
-            if (abort) {
-              abort();
-            }
-          }}
-          error={error}
-          isOpen={isPassphraseRequested}
-          setIsOpen={setIsPassphraseRequested}
-        />
-        <AuthUrlChallengeModal
-          actionOnCancel={() => {
-            if (abort) {
-              abort();
-            }
-          }}
-          isOpen={isAuthChallengeRequested}
-          setIsOpen={(value: boolean) => {
-            setIsAuthChallengeRequested(value);
-          }}
-          error={error}
-          challenge={authUrl}
-        />
-        <MigrationPromptModal
-          isOpen={showMigrationModal}
-          onClose={() => setShowMigrationModal(false)}
-          onSuccess={() => {
-            loadSigner();
-          }}
-        />
-        {children}
-      </SignerContext.Provider>
+        actionOnCancel={() => {
+          if (abort) {
+            abort();
+          }
+        }}
+        error={error}
+        isOpen={isPassphraseRequested}
+        setIsOpen={setIsPassphraseRequested}
+      />
+      <AuthUrlChallengeModal
+        actionOnCancel={() => {
+          if (abort) {
+            abort();
+          }
+        }}
+        isOpen={isAuthChallengeRequested}
+        setIsOpen={(value: boolean) => {
+          setIsAuthChallengeRequested(value);
+        }}
+        error={error}
+        challenge={authUrl}
+      />
+      <MigrationPromptModal
+        isOpen={showMigrationModal}
+        onClose={() => setShowMigrationModal(false)}
+        onSuccess={() => {
+          loadSigner();
+        }}
+      />
+      {children}
     </>
   );
 }
 
+/**
+ * NostrContextProvider — initializes the NostrManager in useAuthStore.
+ * No longer uses React Context.
+ */
 export function NostrContextProvider({ children }: { children: ReactNode }) {
   const [nostr] = useState<NostrManager>(new NostrManager());
+
+  // Set on the store immediately
+  useEffect(() => {
+    useAuthStore.getState().setNostr(nostr);
+  }, [nostr]);
 
   const reload = useCallback(() => {
     const { readRelays, writeRelays, relays } = getLocalStorageData();
@@ -334,15 +317,25 @@ export function NostrContextProvider({ children }: { children: ReactNode }) {
     };
   }, [reload]);
 
-  return (
-    <>
-      <NostrContext.Provider
-        value={{
-          nostr,
-        }}
-      >
-        {children}
-      </NostrContext.Provider>
-    </>
-  );
+  return <>{children}</>;
 }
+
+// ---- Backward-compatibility re-exports ----
+// These are kept temporarily so that test files that import SignerContext
+// and NostrContext still compile. They are no longer used by production code.
+import { createContext } from "react";
+
+/** @deprecated Use useAuthStore instead */
+export const SignerContext = createContext({
+  signer: {} as NostrSigner,
+  isLoggedIn: false,
+  isAuthStateResolved: false,
+  pubkey: "",
+  npub: "",
+  newSigner: {},
+} as any);
+
+/** @deprecated Use useAuthStore instead */
+export const NostrContext = createContext({
+  nostr: {} as NostrManager,
+} as any);

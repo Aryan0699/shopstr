@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useContext, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/router";
 import { useForm, Controller } from "react-hook-form";
 import {
@@ -11,12 +11,9 @@ import {
   Switch,
 } from "@heroui/react";
 
-import { ShopMapContext } from "@/utils/context/context";
+import { useMarketStore } from "@/utils/stores/market-store";
 import { SHOPSTRBUTTONCLASSNAMES } from "@/utils/STATIC-VARIABLES";
-import {
-  SignerContext,
-  NostrContext,
-} from "@/components/utility-components/nostr-context-provider";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import { createNostrShopEvent } from "@/utils/nostr/nostr-helper-functions";
 import {
   buildSignedHttpRequestProofTemplate,
@@ -184,7 +181,7 @@ function sanitizeSlug(input: string) {
 
 const ShopProfileForm = ({ isOnboarding = false }: ShopProfileFormProps) => {
   const router = useRouter();
-  const { nostr } = useContext(NostrContext);
+  const nostr = useAuthStore((s) => s.nostr);
   const [isUploadingShopProfile, setIsUploadingShopProfile] = useState(false);
   const [isFetchingShop, setIsFetchingShop] = useState(false);
   const [freeShippingThreshold, setFreeShippingThreshold] =
@@ -228,8 +225,12 @@ const ShopProfileForm = ({ isOnboarding = false }: ShopProfileFormProps) => {
   const [contactEmail, setContactEmail] = useState("");
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
-  const { signer, pubkey: userPubkey } = useContext(SignerContext);
-  const shopContext = useContext(ShopMapContext);
+  const signer = useAuthStore((s) => s.signer);
+  const userPubkey = useAuthStore((s) => s.pubkey);
+  const shopContext = {
+    shopData: useMarketStore((s) => s.shopData),
+    updateShopData: useMarketStore.getState().updateShop,
+  };
 
   const { handleSubmit, control, reset, watch, setValue } = useForm({
     defaultValues: {

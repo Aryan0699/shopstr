@@ -1,21 +1,21 @@
 /* eslint-disable @next/next/no-img-element */
 
 import router from "next/router";
-import { useContext, useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import DisplayProducts from "../display-products";
-import { SignerContext } from "@/components/utility-components/nostr-context-provider";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import { Button, useDisclosure } from "@heroui/react";
 import { Bars3Icon } from "@heroicons/react/24/outline";
 import { SHOPSTRBUTTONCLASSNAMES } from "@/utils/STATIC-VARIABLES";
 import SignInModal from "../sign-in/SignInModal";
-import { ShopMapContext } from "@/utils/context/context";
+import { useMarketStore } from "@/utils/stores/market-store";
 import { ShopProfile } from "../../utils/types/types";
 import { sanitizeUrl } from "@braintree/sanitize-url";
 import SideShopNav from "../home/side-shop-nav";
 import DiscountCodes from "./discount-codes";
 
 const MyListingsPage = () => {
-  const { pubkey: usersPubkey } = useContext(SignerContext);
+  const usersPubkey = useAuthStore((s) => s.pubkey);
   const { isOpen, onOpen, onClose } = useDisclosure();
 
   const [selectedSection, setSelectedSection] = useState("Listings");
@@ -27,7 +27,7 @@ const MyListingsPage = () => {
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const shopMapContext = useContext(ShopMapContext);
+  const shopMapContext = { shopData: useMarketStore((s) => s.shopData) };
   const shopProfile: ShopProfile | undefined = usersPubkey
     ? shopMapContext.shopData.get(usersPubkey)
     : undefined;

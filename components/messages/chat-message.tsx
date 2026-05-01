@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { nip19 } from "nostr-tools";
 import { CheckIcon, ClipboardIcon } from "@heroicons/react/24/outline";
@@ -7,7 +7,7 @@ import LinkPreview from "./link-preview";
 import { NostrMessageEvent } from "../../utils/types/types";
 import { timeSinceMessageDisplayText } from "../../utils/messages/utils";
 import { getDecodedToken } from "@cashu/cashu-ts";
-import { SignerContext } from "@/components/utility-components/nostr-context-provider";
+import { useAuthStore } from "@/utils/stores/auth-store";
 
 function isDecodableToken(token: string): boolean {
   try {
@@ -37,7 +37,7 @@ const ChatMessage = ({
 }) => {
   const router = useRouter();
   const [copiedToClipboard, setCopiedToClipboard] = useState(false);
-  const { pubkey: userPubkey } = useContext(SignerContext);
+  const userPubkey = useAuthStore((s) => s.pubkey);
 
   useEffect(() => {
     if (messageEvent?.content && messageEvent.content.includes("npub1")) {

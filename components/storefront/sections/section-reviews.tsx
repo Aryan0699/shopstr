@@ -1,6 +1,5 @@
 import { StorefrontSection, StorefrontColorScheme } from "@/utils/types/types";
-import { useContext } from "react";
-import { ReviewsContext } from "@/utils/context/context";
+import { useMarketStore } from "@/utils/stores/market-store";
 
 interface SectionReviewsProps {
   section: StorefrontSection;
@@ -13,7 +12,7 @@ export default function SectionReviews({
   colors,
   shopPubkey,
 }: SectionReviewsProps) {
-  const reviewsContext = useContext(ReviewsContext);
+  const reviewsContext = { merchantReviewsData: useMarketStore((s) => s.merchantReviewsData) };
 
   const merchantReviewData =
     reviewsContext?.merchantReviewsData?.get(shopPubkey);

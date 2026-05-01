@@ -1,7 +1,7 @@
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { nip19 } from "nostr-tools";
-import { CommunityContext } from "@/utils/context/context";
+import { useSocialStore } from "@/utils/stores/social-store";
 import { Community } from "@/utils/types/types";
 import { Spinner } from "@heroui/react";
 import CommunityFeed from "@/components/communities/CommunityFeed";
@@ -70,7 +70,7 @@ export const getServerSideProps: GetServerSideProps<
 const SingleCommunityPage = () => {
   const router = useRouter();
   const { naddr } = router.query;
-  const { communities } = useContext(CommunityContext);
+  const communities = useSocialStore((s) => s.communities);
   const [community, setCommunity] = useState<Community | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 

@@ -1,7 +1,9 @@
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect } from "react";
 import { deleteEvent } from "@/utils/nostr/nostr-helper-functions";
 import { NostrEvent } from "../utils/types/types";
-import { ProductContext, FollowsContext } from "../utils/context/context";
+import { useMarketStore } from "@/utils/stores/market-store";
+import { useSocialStore } from "@/utils/stores/social-store";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import ProductCard from "./utility-components/product-card";
 import DisplayProductModal from "./display-product-modal";
 import { SHOPSTRBUTTONCLASSNAMES } from "@/utils/STATIC-VARIABLES";
@@ -12,10 +14,6 @@ import parseTags, {
   ProductData,
 } from "@/utils/parsers/product-parser-functions";
 import { parseZapsnagNote } from "@/utils/parsers/zapsnag-parser";
-import {
-  NostrContext,
-  SignerContext,
-} from "@/components/utility-components/nostr-context-provider";
 import { getListingSlug } from "@/utils/url-slugs";
 import { productSatisfiesAllFilters } from "@/utils/parsers/product-filter-helpers";
 
@@ -42,8 +40,17 @@ const DisplayProducts = ({
 }) => {
   const [productEvents, setProductEvents] = useState<ProductData[]>([]);
   const [isProductsLoading, setIsProductLoading] = useState(true);
-  const productEventContext = useContext(ProductContext);
-  const followsContext = useContext(FollowsContext);
+  const productEventContext = {
+    productEvents: useMarketStore((s) => s.productEvents),
+    isLoading: useMarketStore((s) => s.isProductsLoading),
+    addNewlyCreatedProductEvent: useMarketStore.getState().addProduct,
+    removeDeletedProductEvent: useMarketStore.getState().removeProduct,
+  };
+  const followsContext = {
+    followList: useSocialStore((s) => s.followList),
+    firstDegreeFollowsLength: useSocialStore((s) => s.firstDegreeFollowsLength),
+    isLoading: useSocialStore((s) => s.isFollowsLoading),
+  };
   const [focusedProduct, setFocusedProduct] = useState<ProductData>();
   const [showModal, setShowModal] = useState(false);
 
@@ -55,8 +62,9 @@ const DisplayProducts = ({
 
   const router = useRouter();
 
-  const { nostr } = useContext(NostrContext);
-  const { signer, pubkey: userPubkey } = useContext(SignerContext);
+  const nostr = useAuthStore((s) => s.nostr);
+  const signer = useAuthStore((s) => s.signer);
+  const userPubkey = useAuthStore((s) => s.pubkey);
 
   // Load saved page from session storage on mount
   useEffect(() => {

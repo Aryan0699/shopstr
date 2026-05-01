@@ -1,4 +1,4 @@
-import { useEffect, useState, useContext } from "react";
+import { useEffect, useState } from "react";
 import {
   Modal,
   ModalContent,
@@ -17,10 +17,10 @@ import {
 import * as nip49 from "nostr-tools/nip49";
 import { getPublicKey } from "nostr-tools";
 import ShopstrSpinner from "@/components/utility-components/shopstr-spinner";
-import { RelaysContext } from "../../utils/context/context";
+import { useConfigStore } from "@/utils/stores/config-store";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import { useRouter } from "next/router";
 import FailureModal from "../../components/utility-components/failure-modal";
-import { SignerContext } from "@/components/utility-components/nostr-context-provider";
 import { NostrSigner } from "@/utils/nostr/signers/nostr-signer";
 import { NostrNSecSigner } from "@/utils/nostr/signers/nostr-nsec-signer";
 import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
@@ -59,10 +59,15 @@ export default function SignInModal({
   const [showSignInOptions, setShowSignInOptions] = useState(false);
   const [showSignUpOptions, setShowSignUpOptions] = useState(false);
 
-  const relaysContext = useContext(RelaysContext);
+  const relaysContext = {
+    relayList: useConfigStore((s) => s.relayList),
+    readRelayList: useConfigStore((s) => s.readRelayList),
+    writeRelayList: useConfigStore((s) => s.writeRelayList),
+    isLoading: useConfigStore((s) => s.isRelaysLoading),
+  };
 
   const router = useRouter();
-  const { newSigner } = useContext(SignerContext);
+  const newSigner = useAuthStore((s) => s.newSigner);
 
   const saveSigner = (signer: NostrSigner) => {
     if (

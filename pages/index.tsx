@@ -10,14 +10,14 @@ import {
 } from "@heroicons/react/24/outline";
 import { useRouter } from "next/router";
 import { SHOPSTRBUTTONCLASSNAMES } from "@/utils/STATIC-VARIABLES";
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { ProductContext } from "@/utils/context/context";
 import ProductCard from "@/components/utility-components/product-card";
 import parseTags, {
   ProductData,
 } from "@/utils/parsers/product-parser-functions";
-import { SignerContext } from "@/components/utility-components/nostr-context-provider";
+import { useAuthStore } from "@/utils/stores/auth-store";
+import { useMarketStore } from "@/utils/stores/market-store";
 import Link from "next/link";
 import { nip19 } from "nostr-tools";
 import { NostrEvent } from "@/utils/types/types";
@@ -26,13 +26,13 @@ export default function Landing() {
   const router = useRouter();
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [isSellerFlow, setIsSellerFlow] = useState(false);
-  const productEventContext = useContext(ProductContext);
+  const productEvents = useMarketStore((s) => s.productEvents);
 
   const [parsedProducts, setParsedProducts] = useState<ProductData[]>([]);
   const [listingCount, setListingCount] = useState<number | null>(null);
   const [sellerCount, setSellerCount] = useState<number | null>(null);
 
-  const signerContext = useContext(SignerContext);
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
 
   useEffect(() => {
     fetch("/api/db/marketplace-stats")
@@ -48,15 +48,14 @@ export default function Landing() {
       });
   }, []);
   useEffect(() => {
-    if (router.pathname === "/" && signerContext.isLoggedIn) {
+    if (router.pathname === "/" && isLoggedIn) {
       router.push("/marketplace");
     }
-  }, [router.pathname, signerContext.isLoggedIn]);
+  }, [router.pathname, isLoggedIn]);
 
   useEffect(() => {
     const parsedProductsArray: ProductData[] = [];
-    const products = productEventContext.productEvents;
-    products.forEach((product: NostrEvent) => {
+    productEvents.forEach((product: NostrEvent) => {
       const parsedProduct = parseTags(product) as ProductData;
       if (
         parsedProduct.images.length > 0 &&
@@ -67,7 +66,7 @@ export default function Landing() {
       }
     });
     setParsedProducts(parsedProductsArray);
-  }, [productEventContext.productEvents]);
+  }, [productEvents]);
 
   return (
     <div className="bg-light-bg from-light-bg to-light-fg dark:bg-dark-bg dark:from-dark-bg dark:to-dark-fg min-h-screen w-full bg-gradient-to-b">

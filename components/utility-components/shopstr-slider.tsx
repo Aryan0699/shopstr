@@ -1,15 +1,17 @@
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@heroui/react";
 import { Slider } from "@heroui/react";
 import { useTheme } from "next-themes";
-import { FollowsContext } from "../../utils/context/context";
+import { useSocialStore } from "@/utils/stores/social-store";
 import { getLocalStorageData } from "@/utils/nostr/nostr-helper-functions";
 import { SHOPSTRBUTTONCLASSNAMES } from "@/utils/STATIC-VARIABLES";
 
 const ShopstrSlider = () => {
   const { theme } = useTheme();
-
-  const followsContext = useContext(FollowsContext);
+  const firstDegreeFollowsLength = useSocialStore(
+    (state) => state.firstDegreeFollowsLength
+  );
+  const isFollowsLoading = useSocialStore((state) => state.isFollowsLoading);
 
   const [wot, setWot] = useState(3);
   const [wotIsChanged, setWotIsChanged] = useState(false);
@@ -38,8 +40,8 @@ const ShopstrSlider = () => {
           label="Minimum Follower Count:"
           showSteps={true}
           maxValue={
-            !followsContext.isLoading && followsContext.firstDegreeFollowsLength
-              ? followsContext.firstDegreeFollowsLength
+            !isFollowsLoading && firstDegreeFollowsLength
+              ? firstDegreeFollowsLength
               : wot
           }
           minValue={1}

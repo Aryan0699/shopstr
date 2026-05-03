@@ -319,23 +319,3 @@ export function NostrContextProvider({ children }: { children: ReactNode }) {
 
   return <>{children}</>;
 }
-
-// ---- Backward-compatibility re-exports ----
-// These are kept temporarily so that test files that import SignerContext
-// and NostrContext still compile. They are no longer used by production code.
-import { createContext } from "react";
-
-/** @deprecated Use useAuthStore instead */
-export const SignerContext = createContext({
-  signer: {} as NostrSigner,
-  isLoggedIn: false,
-  isAuthStateResolved: false,
-  pubkey: "",
-  npub: "",
-  newSigner: {},
-} as any);
-
-/** @deprecated Use useAuthStore instead */
-export const NostrContext = createContext({
-  nostr: {} as NostrManager,
-} as any);

@@ -7,7 +7,6 @@ import {
   getDefaultRelays,
   LogOut,
 } from "@/utils/nostr/nostr-helper-functions";
-import { createNip98AuthorizationHeader } from "@/utils/nostr/nip98-auth";
 import { HeroUIProvider } from "@heroui/react";
 import { ThemeProvider as NextThemesProvider } from "next-themes";
 import {
@@ -22,7 +21,6 @@ import {
   fetchAllCommunities,
   fetchGiftWrappedChatsAndMessages,
 } from "@/utils/nostr/fetch-service";
-import { NostrMessageEvent } from "../utils/types/types";
 import TopNav from "@/components/nav-top";
 import PageLoadingBar from "@/components/page-loading-bar";
 import DynamicHead from "../components/dynamic-meta-head";

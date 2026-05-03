@@ -1,15 +1,11 @@
 import React, {
-  useContext,
   useEffect,
   useState,
   useCallback,
   useMemo,
 } from "react";
 import { Community, CommunityPost, NostrEvent } from "@/utils/types/types";
-import {
-  NostrContext,
-  SignerContext,
-} from "../utility-components/nostr-context-provider";
+import { useAuthStore } from "@/utils/stores/auth-store";
 import {
   fetchCommunityPosts,
   fetchPendingPosts,
@@ -114,8 +110,9 @@ const RenderContent = ({
 };
 
 const CommunityFeed: React.FC<CommunityFeedProps> = ({ community }) => {
-  const { nostr } = useContext(NostrContext);
-  const { signer, pubkey } = useContext(SignerContext);
+  const nostr = useAuthStore((state) => state.nostr);
+  const signer = useAuthStore((state) => state.signer);
+  const pubkey = useAuthStore((state) => state.pubkey);
   const [approvedPosts, setApprovedPosts] = useState<CommunityPost[]>([]);
   const [pendingPosts, setPendingPosts] = useState<NostrEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);

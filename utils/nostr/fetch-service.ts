@@ -10,7 +10,7 @@ import {
   Wallet as CashuWallet,
   Proof,
 } from "@cashu/cashu-ts";
-import { ChatsMap } from "@/utils/context/context";
+import { ChatsMap } from "@/utils/stores/social-store";
 import {
   getLocalStorageData,
   deleteEvent,

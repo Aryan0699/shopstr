@@ -107,7 +107,7 @@ export default function ProductInvoiceCard({
     chatsMap: useSocialStore((s) => s.chatsMap),
     isLoading: useSocialStore((s) => s.isChatsLoading),
     addNewlyCreatedMessageEvent: (msg: any, sent?: boolean) => useSocialStore.getState().addMessage(msg, sent),
-    markAllMessagesAsRead: async () => { useSocialStore.getState().markAllRead(); return [] as string[]; },
+    markAllMessagesAsRead: () => useSocialStore.getState().markAllRead(),
     newOrderIds: useSocialStore((s) => s.newOrderIds),
   };
   const profileContext = {

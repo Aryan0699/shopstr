@@ -1,4 +1,4 @@
-import { ChatsMap } from "../context/context";
+import { ChatsMap } from "../stores/social-store";
 import { NostrMessageEvent } from "../types/types";
 
 export const timeSinceMessageDisplayText = (

@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { addToast } from "@heroui/react";
-import { shallow } from "zustand/shallow";
-import { useFollowsStore, useSignerStore } from "@/utils/store";
+import { useAuthStore } from "@/utils/stores/auth-store";
+import { useSocialStore } from "@/utils/stores/social-store";
 
 type UseFollowToggleOptions = {
   onRequireSignIn?: () => void;
@@ -12,15 +12,10 @@ export function useFollowToggle(
   pubkey: string,
   { onRequireSignIn, onSuccess }: UseFollowToggleOptions = {}
 ) {
-  const { addFollow, removeFollow, directFollowList } = useFollowsStore(
-    (state) => ({
-      addFollow: state.addFollow,
-      removeFollow: state.removeFollow,
-      directFollowList: state.directFollowList,
-    }),
-    shallow
-  );
-  const isLoggedIn = useSignerStore((state) => state.isLoggedIn);
+  const addFollow = useSocialStore((state) => state.addFollow);
+  const removeFollow = useSocialStore((state) => state.removeFollow);
+  const directFollowList = useSocialStore((state) => state.directFollowList);
+  const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
   const [isLoading, setIsLoading] = useState(false);
   const isFollowing = directFollowList.includes(pubkey);
 

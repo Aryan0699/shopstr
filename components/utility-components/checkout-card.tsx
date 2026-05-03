@@ -240,7 +240,12 @@ export default function CheckoutCard({
       }
     }
     setIsFetchingReviews(false);
-  }, [productData.pubkey, reviewsContext, productData.d]);
+  }, [
+    productData.pubkey,
+    productData.d,
+    reviewsContext.merchantReviewsData,
+    reviewsContext.productReviewsData,
+  ]);
 
   useEffect(() => {
     if (containerRef.current) {
@@ -283,7 +288,11 @@ export default function CheckoutCard({
     } else {
       setMerchantQuality("Don't trust, don't bother verifying");
     }
-  }, [reviewsContext, merchantReview, productData.pubkey]);
+  }, [
+    reviewsContext.merchantReviewsData,
+    merchantReview,
+    productData.pubkey,
+  ]);
 
   const toggleBuyNow = () => {
     if (isLoggedIn) {

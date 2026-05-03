@@ -723,7 +723,13 @@ const OrdersDashboard = () => {
     }
 
     loadOrders();
-  }, [chatsContext, productContext, cachedStatuses, signer]);
+  }, [
+    chatsContext.isLoading,
+    chatsContext.chatsMap,
+    productContext.productEvents,
+    cachedStatuses,
+    signer,
+  ]);
 
   const convertToSats = (amount: number, currency: string): number => {
     const curr = currency?.toLowerCase() || "sats";

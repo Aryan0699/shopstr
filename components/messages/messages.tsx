@@ -117,7 +117,15 @@ const Messages = ({ isPayment }: { isPayment: boolean }) => {
       }
     }
     loadChats();
-  }, [chatsContext, isPayment]);
+  }, [
+    chatsContext.isLoading,
+    chatsContext.chatsMap,
+    currentChatPubkey,
+    isPayment,
+    router.query.pk,
+    router.query.productTitle,
+    router.query.productUrl,
+  ]);
 
   useEffect(() => {
     const sortedChatsByLastMessage = Array.from(chatsMap.entries()).sort(

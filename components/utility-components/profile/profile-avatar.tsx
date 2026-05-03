@@ -39,7 +39,7 @@ export const ProfileAvatar = ({
         : `https://robohash.org/${pubkey}`
     );
     setIsNip05Verified(profile?.nip05Verified || false);
-  }, [profileContext, pubkey, npub]);
+  }, [profileContext.profileData, pubkey, npub]);
 
   return (
     <User

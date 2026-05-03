@@ -162,7 +162,7 @@ export default function ProductForm({
     } else {
       setIsFlashSale(false);
     }
-  }, [showModal, signerPubKey, profileContext]);
+  }, [showModal, signerPubKey, profileContext.profileData]);
 
   const onSubmit = async (data: {
     [x: string]: string | Map<string, number> | string[];

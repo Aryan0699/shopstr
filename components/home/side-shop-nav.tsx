@@ -54,7 +54,7 @@ const SideShopNav = ({
         setShopAbout(shopProfile.content.about);
       }
     }
-  }, [shopMapContext, focusedPubkey]);
+  }, [shopMapContext.shopData, focusedPubkey]);
 
   useEffect(() => {
     if (categories) {

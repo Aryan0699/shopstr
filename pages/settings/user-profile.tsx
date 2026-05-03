@@ -118,7 +118,7 @@ const UserProfilePage = () => {
       }
     }
     setIsFetchingProfile(false);
-  }, [profileContext, userPubkey, reset]);
+  }, [profileContext.profileData, userPubkey, reset]);
 
   const onSubmit = async (data: { [x: string]: string }) => {
     if (!userPubkey) {

@@ -331,7 +331,7 @@ const ShopProfileForm = ({ isOnboarding = false }: ShopProfileFormProps) => {
     setIsFetchingShop(true);
     applyShopConfig(shop.content);
     setIsFetchingShop(false);
-  }, [shopContext, userPubkey, applyShopConfig]);
+  }, [shopContext.shopData, userPubkey, applyShopConfig]);
 
   const onSubmit = async (data: { [x: string]: string }) => {
     setIsUploadingShopProfile(true);

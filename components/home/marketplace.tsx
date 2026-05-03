@@ -222,7 +222,11 @@ function MarketplacePage({
       }
     }
     setIsFetchingReviews(false);
-  }, [focusedPubkey, reviewsContext]);
+  }, [
+    focusedPubkey,
+    reviewsContext.merchantReviewsData,
+    reviewsContext.productReviewsData,
+  ]);
 
   useEffect(() => {
     if (!reviewsContext.merchantReviewsData.has(focusedPubkey)) {
@@ -236,7 +240,7 @@ function MarketplacePage({
     } else {
       setMerchantQuality("Don't trust, don't bother verifying");
     }
-  }, [reviewsContext, merchantReview]);
+  }, [reviewsContext.merchantReviewsData, focusedPubkey, merchantReview]);
 
   useEffect(() => {
     setIsFetchingShop(true);
@@ -254,14 +258,14 @@ function MarketplacePage({
       }
     }
     setIsFetchingShop(false);
-  }, [focusedPubkey, shopMapContext]);
+  }, [focusedPubkey, shopMapContext.shopData]);
 
   useEffect(() => {
     setIsFetchingFollows(true);
     if (followsContext.followList.length && !followsContext.isLoading) {
       setIsFetchingFollows(false);
     }
-  }, [followsContext]);
+  }, [followsContext.followList, followsContext.isLoading]);
 
   const handleFilteredProductsChange = (products: ProductData[]) => {
     setFilteredProducts(products);

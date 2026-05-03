@@ -135,7 +135,7 @@ const UserProfileForm = ({ isOnboarding }: UserProfileFormProps) => {
         setUserNcryptsec(encKey);
       }
     }
-  }, [profileContext, userPubkey, signer, reset]);
+  }, [profileContext.profileData, userPubkey, signer, reset]);
 
   const onSubmit = async (data: { [x: string]: string }) => {
     if (!userPubkey) {

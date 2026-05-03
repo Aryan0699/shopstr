@@ -158,7 +158,7 @@ export default function ClaimButton({ token }: { token: string }) {
         ? sellerProfile.content.lud16
         : "invalid"
     );
-  }, [profileContext, tokenMint, userPubkey]);
+  }, [profileContext.profileData, tokenMint, userPubkey]);
 
   const handleClaimType = async (type: string) => {
     if (type === "receive") {

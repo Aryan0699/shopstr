@@ -493,7 +493,7 @@ async function initializeTables(): Promise<void> {
 }
 
 // Map event kinds to table names
-function getTableForKind(kind: number): string | null {
+export function getTableForKind(kind: number): string | null {
   // Contact list
   if (kind === 3) return "contact_list_events";
 

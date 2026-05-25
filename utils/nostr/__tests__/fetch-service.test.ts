@@ -29,10 +29,7 @@ describe("fetch-service report helpers", () => {
           content: "spam listing",
           sig: "sig-1",
         },
-         // Contact list (3), wallet config (17375), wallet state (37375), relay list (10002), blossom servers (10063)
-531
- 
- {
+        {
           id: "db-irrelevant",
           pubkey: "reporter-2",
           created_at: 11,
@@ -245,6 +242,10 @@ describe("fetchAllFollows", () => {
   beforeEach(() => {
     jest.resetModules();
     jest.clearAllMocks();
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ contactList: null }),
+    }) as typeof global.fetch;
 
     jest.doMock("@/utils/nostr/nostr-helper-functions", () => ({
       getLocalStorageData: jest.fn(() => ({ wot: 2 })),
@@ -272,7 +273,7 @@ describe("fetchAllFollows", () => {
 
     expect(result.followList).toEqual([]);
     expect(nostr.fetch).not.toHaveBeenCalled();
-    expect(editFollowsContext).toHaveBeenCalledWith([], 0, false);
+    expect(editFollowsContext).toHaveBeenCalledWith([], [], 0, false);
   });
 
   it("keeps follows empty when a logged-in user has no contact list", async () => {
@@ -296,7 +297,7 @@ describe("fetchAllFollows", () => {
       {},
       ["wss://relay.example"]
     );
-    expect(editFollowsContext).toHaveBeenCalledWith([], 0, false);
+    expect(editFollowsContext).toHaveBeenCalledWith([], [], 0, false);
   });
 
   it("uses only the latest kind 3 contact list for direct follows", async () => {
@@ -344,6 +345,7 @@ describe("fetchAllFollows", () => {
       ["wss://relay.example"]
     );
     expect(editFollowsContext).toHaveBeenCalledWith(
+      [latestFollowPubkey],
       [latestFollowPubkey],
       1,
       false

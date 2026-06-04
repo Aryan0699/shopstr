@@ -2,10 +2,10 @@
 
 Standalone read-only MCP server package for Shopstr marketplace data.
 
-This package currently contains the standalone MCP shell plus shared read-only
-infrastructure for relay access, validation, JSON-safe parsing, deduplication,
-structured errors, timeouts, and audit logging. Listing, seller, review, and
-community tools will be added in follow-up PRs.
+This package currently contains the standalone MCP shell, shared read-only
+infrastructure, and the first relay-backed read tools for public Shopstr
+marketplace data. Seller, storefront, reputation, prompt, and resource features
+will be added in follow-up PRs.
 
 ## Current Scope
 
@@ -13,11 +13,29 @@ community tools will be added in follow-up PRs.
 - Reads relay, timeout, cache, and log-level settings from environment
   variables.
 - Starts an MCP server over stdio for local MCP-compatible clients.
-- Registers disabled placeholders so `tools/list`, `resources/list`, and
-  `prompts/list` return valid empty lists until real read tools are added.
+- Registers relay-backed core read tools:
+  `search_products`, `get_product_details`, and `get_reviews`.
+- Registers disabled resource and prompt placeholders so `resources/list` and
+  `prompts/list` return valid empty lists until those features are added.
 - Provides reusable infrastructure modules for upcoming tools:
   `nostr-manager`, `relay-fetch`, `parse-tags`, `dedup`, `validation`,
   `errors`, `timeout`, and `audit-log`.
+
+## Tools
+
+- `search_products`: search public product listings by keyword, category,
+  location, currency, and price range. Price filters require `currency`.
+  Responses are capped at 37 products for MCP token budgeting, even when a
+  higher `limit` is requested.
+- `get_product_details`: fetch one product listing by 64-character event ID.
+- `get_reviews`: fetch public reviews for a product address, product ID, or
+  seller pubkey. Product reviews use the Shopstr/Gamma `#d` address model and
+  also query the standard `#a` address model; `productId` is resolved to a
+  product address when possible and keeps a legacy `#e` fallback.
+
+Tool responses include relay degradation metadata in `_meta`, including queried
+relays, successful relays, failed relays, coverage, response time, hints, and
+truncation flags when response budgeting applies.
 
 ## Usage
 
@@ -56,4 +74,9 @@ and audit logging.
 ```sh
 npm --prefix packages/shopstr-mcp run build
 npm --prefix packages/shopstr-mcp test
+```
+
+## For Verification
+```sh
+npx @modelcontextprotocol/inspector node shopstr/packages/shopstr-mcp/dist/index.js
 ```

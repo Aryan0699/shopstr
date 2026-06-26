@@ -38,7 +38,6 @@ import { createNip98AuthorizationHeader } from "@/utils/nostr/nip98-auth";
 import { HeroUIProvider, ToastProvider } from "@heroui/react";
 import { ThemeProvider as NextThemesProvider } from "next-themes";
 import {
-  fetchAllPosts,
   fetchReviews,
   fetchShopProfile,
   fetchProfile,
@@ -46,10 +45,13 @@ import {
   fetchAllRelays,
   fetchAllBlossomServers,
   fetchCashuWallet,
+  fetchEscrowRecords,
   fetchAllCommunities,
   fetchGiftWrappedChatsAndMessages,
   fetchReports,
+  getUniqueProofs,
 } from "@/utils/nostr/fetch-service";
+import { fetchAllPostsAbortable } from "@/utils/nostr/fetch-all-posts-abortable";
 import {
   NostrEvent,
   Community,
@@ -632,13 +634,21 @@ function Shopstr({ props }: { props: AppProps }) {
     proofEvents: any[],
     cashuMints: string[],
     cashuProofs: Proof[],
-    isLoading: boolean
+    isLoading: boolean,
+    keys?: {
+      cashuPubkey?: string;
+      cashuPrivkey?: string;
+      walletIdentityUnavailable?: boolean;
+    }
   ) => {
     setCashuWalletContext({
       proofEvents,
       cashuMints,
       cashuProofs,
       isLoading,
+      cashuPubkey: keys?.cashuPubkey,
+      cashuPrivkey: keys?.cashuPrivkey,
+      walletIdentityUnavailable: keys?.walletIdentityUnavailable,
     });
   };
 
@@ -650,6 +660,8 @@ function Shopstr({ props }: { props: AppProps }) {
 
   /** FETCH initial FOLLOWS, RELAYS, PRODUCTS, and PROFILES **/
   useEffect(() => {
+    const abortController = new AbortController();
+
     async function fetchData() {
       const runId = ++initializationRunRef.current;
       const isCurrentRun = () => runId === initializationRunRef.current;
@@ -816,6 +828,12 @@ function Shopstr({ props }: { props: AppProps }) {
             )
           : Promise.resolve(undefined);
 
+        const escrowPromise = isLoggedIn
+          ? runTask("fetching escrow records", () =>
+              fetchEscrowRecords(nostr!, signer!, allRelays)
+            )
+          : Promise.resolve(undefined);
+
         const followsPromise = runTask(
           "fetching follows",
           () =>
@@ -837,7 +855,13 @@ function Shopstr({ props }: { props: AppProps }) {
 
         const productsPromise = runTask(
           "fetching products",
-          () => fetchAllPosts(nostr!, allRelays, guardedEditProductContext),
+          () =>
+            fetchAllPostsAbortable(
+              nostr!,
+              allRelays,
+              guardedEditProductContext,
+              abortController.signal
+            ),
           () => guardedEditProductContext(null, false)
         );
 
@@ -958,6 +982,7 @@ function Shopstr({ props }: { props: AppProps }) {
           walletPromise,
           followsPromise,
           communitiesPromise,
+          escrowPromise,
         ]);
 
         if (!isCurrentRun()) return;
@@ -970,14 +995,17 @@ function Shopstr({ props }: { props: AppProps }) {
         }
 
         if (walletResult?.cashuMints?.length && walletResult.cashuProofs) {
+          const { tokens: currentTokens } = getLocalStorageData();
+          const mergedProofs = getUniqueProofs([
+            ...(currentTokens as Proof[]),
+            ...walletResult.cashuProofs,
+          ]);
+
           localStorage.setItem(
             "mints",
             JSON.stringify(walletResult.cashuMints)
           );
-          localStorage.setItem(
-            "tokens",
-            JSON.stringify(walletResult.cashuProofs)
-          );
+          localStorage.setItem("tokens", JSON.stringify(mergedProofs));
         }
 
         await runTask("retrying relay publishes", async () => {
@@ -1008,6 +1036,10 @@ function Shopstr({ props }: { props: AppProps }) {
     }
 
     fetchData();
+
+    return () => {
+      abortController.abort();
+    };
   }, [nostr, signer, isLoggedIn]);
 
   useEffect(() => {

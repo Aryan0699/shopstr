@@ -355,7 +355,7 @@ async function initializeTables(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_community_events_pubkey ON community_events(pubkey);
       CREATE INDEX IF NOT EXISTS idx_community_events_kind ON community_events(kind);
 
-      -- Relay/config events (kind 10002 - relays, kind 10063 - blossom servers, kind 30405 - cart/saved)
+      -- Relay/config events (kind 10002 - relays, kind 10063 - blossom servers, kind 30405 - cart/saved, kind 30406 - buyer P2PK escrow records)
       CREATE TABLE IF NOT EXISTS config_events (
           id TEXT PRIMARY KEY,
           pubkey TEXT NOT NULL,
@@ -365,7 +365,7 @@ async function initializeTables(): Promise<void> {
           content TEXT NOT NULL,
           sig TEXT NOT NULL,
           cached_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          CONSTRAINT config_events_kind_check CHECK (kind IN (10002, 10063, 30405))
+          CONSTRAINT config_events_kind_check CHECK (kind IN (10002, 10063, 30405, 30406))
       );
 
       CREATE INDEX IF NOT EXISTS idx_config_events_pubkey ON config_events(pubkey);
@@ -452,6 +452,15 @@ async function initializeTables(): Promise<void> {
     await client.query(`
       DO $$
       BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.table_constraints
+          WHERE table_name = 'config_events' AND constraint_name = 'config_events_kind_check'
+        ) THEN
+          ALTER TABLE config_events DROP CONSTRAINT config_events_kind_check;
+        END IF;
+        ALTER TABLE config_events
+          ADD CONSTRAINT config_events_kind_check CHECK (kind IN (10002, 10063, 30405, 30406));
+
         IF NOT EXISTS (
           SELECT 1 FROM information_schema.columns 
           WHERE table_name = 'message_events' AND column_name = 'is_read'
@@ -519,7 +528,7 @@ export function getTableForKind(kind: number): string | null {
   if ([34550, 1111, 4550].includes(kind)) return "community_events";
 
   // Config
-  if ([10002, 10063, 30405].includes(kind)) return "config_events";
+  if ([10002, 10063, 30405, 30406].includes(kind)) return "config_events";
 
   return null;
 }
@@ -1330,7 +1339,17 @@ export async function getUnreadMessageCount(pubkey: string): Promise<number> {
   try {
     client = await dbPool.connect();
     const result = await client.query(
-      `SELECT COUNT(*) FROM message_events WHERE pubkey = $1 AND (is_read = FALSE OR is_read IS NULL)`,
+      `SELECT COUNT(*)
+       FROM message_events
+       WHERE (
+         pubkey = $1
+         OR EXISTS (
+           SELECT 1
+           FROM jsonb_array_elements(tags) elem
+           WHERE elem->>0 = 'p' AND elem->>1 = $1
+         )
+       )
+       AND (is_read = FALSE OR is_read IS NULL)`,
       [pubkey]
     );
     return parseInt(result.rows[0].count, 10);
@@ -1576,6 +1595,13 @@ export async function fetchBlossomConfigFromDb(
   pubkey: string
 ): Promise<NostrEvent[]> {
   return fetchCachedEvents(10063, { pubkey });
+}
+
+// Fetch buyer P2PK escrow records from database
+export async function fetchEscrowRecordsFromDb(
+  pubkey: string
+): Promise<NostrEvent[]> {
+  return fetchCachedEvents(30406, { pubkey });
 }
 
 // Add discount code

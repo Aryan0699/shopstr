@@ -38,8 +38,6 @@ const SideShopNav = ({
     Record<string, number>
   >({});
 
-  const [usersPubkey, setUsersPubkey] = useState<string | null>(null);
-
   const { pubkey: userPubkey, isLoggedIn } = useContext(SignerContext);
   const {
     isFollowing: isFollowingFocusedPubkey,
@@ -67,10 +65,6 @@ const SideShopNav = ({
     }
   }, [categories]);
 
-  useEffect(() => {
-    setUsersPubkey(userPubkey as string);
-  }, [userPubkey]);
-
   const handleSendMessage = (pubkeyToOpenChatWith: string) => {
     if (isLoggedIn) {
       router.push({
@@ -96,7 +90,7 @@ const SideShopNav = ({
   };
 
   const handleCreateNewListing = () => {
-    if (usersPubkey) {
+    if (userPubkey) {
       router.push("?addNewListing");
     } else {
       onOpen();

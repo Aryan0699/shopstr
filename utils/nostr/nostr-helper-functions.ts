@@ -14,6 +14,7 @@ import {
   CommunityRelays,
   NostrEvent,
   ProductFormValues,
+  SavedAddress,
 } from "@/utils/types/types";
 import { ProductData } from "@/utils/parsers/product-parser-functions";
 import { Proof } from "@cashu/cashu-ts";
@@ -31,6 +32,7 @@ import { newPromiseWithTimeout } from "@/utils/timeout";
 import { getLocalStorageJson } from "@/utils/safe-json";
 import { isHexPubkey } from "@/utils/nostr/pubkey";
 import { pickPreferredReplaceableEvent } from "@/utils/nostr/replaceable-events";
+import { buildWalletConfigV1 } from "@/utils/cashu/wallet-config";
 
 export const REPORT_TYPES = [
   "nudity",
@@ -153,25 +155,16 @@ export async function createNostrProfileEvent(
   nostr: NostrManager,
   signer: NostrSigner,
   stringifiedContent: string
-) {
+): Promise<NostrEvent> {
   const profileContent: EventTemplate = {
     created_at: Math.floor(Date.now() / 1000),
     content: stringifiedContent,
     kind: 0,
     tags: [],
   };
-  const signedEvent = await finalizeAndSendNostrEvent(
-    signer,
-    nostr,
-    profileContent
-  );
-
-  // Cache profile event to database
-  if (signedEvent) {
-    await cacheEventToDatabase(signedEvent).catch((error) =>
-      console.error("Failed to cache profile event to database:", error)
-    );
-  }
+  return await finalizeAndSendNostrEvent(signer, nostr, profileContent, {
+    waitForRelayPublish: false,
+  });
 }
 
 export async function PostListing(
@@ -756,20 +749,20 @@ export async function publishSavedForLaterEvent(
 
 export async function publishWalletEvent(
   nostr: NostrManager,
-  signer: NostrSigner
+  signer: NostrSigner,
+  keys: { cashuPubkey?: string; cashuPrivkey?: string },
+  options?: { mints?: string[] }
 ) {
   try {
-    const { mints } = getLocalStorageData();
+    if (!keys.cashuPrivkey) return;
+
     const userPubkey = await signer.getPubKey();
 
     const mintTagsSet = new Set<string>();
 
-    let walletMints = [];
-
-    mints.forEach((mint) => mintTagsSet.add(mint));
-    walletMints = Array.from(mintTagsSet);
-    const mintTags = walletMints.map((mint) => ["mint", mint]);
-    const walletContent = [...mintTags];
+    options?.mints?.forEach((mint) => mintTagsSet.add(mint));
+    const walletMints = Array.from(mintTagsSet);
+    const walletContent = buildWalletConfigV1(keys.cashuPrivkey, walletMints);
     const cashuWalletEvent: EventTemplate = {
       kind: 17375,
       tags: [],
@@ -1065,6 +1058,854 @@ export async function retractApproval(
   return await finalizeAndSendNostrEvent(signer, nostr, eventTemplate);
 }
 
+type FinalizeAndSendOptions = {
+  waitForRelayPublish?: boolean;
+};
+
+async function publishEventWithRetryTracking(
+  nostr: NostrManager,
+  signedEvent: NostrEvent,
+  relayUrls: string[],
+  signer?: NostrSigner
+): Promise<void> {
+  try {
+    await newPromiseWithTimeout(
+      async (resolve, reject) => {
+        try {
+          await nostr.publish(signedEvent, relayUrls);
+          resolve(undefined);
+        } catch (err) {
+          reject(err as Error);
+        }
+      },
+      { timeout: 21000 }
+    );
+  } catch (error) {
+    console.warn(
+      "Relay publish timed out or failed, but event is saved to database:",
+      error
+    );
+
+    if (signer) {
+      const { trackFailedRelayPublish } = await import("@/utils/db/db-client");
+
+      await trackFailedRelayPublish(
+        signedEvent.id,
+        signedEvent,
+        relayUrls,
+        signer
+      ).catch(console.error);
+    }
+  }
+}
+
+export async function finalizeAndSendNostrEvent(
+  signer: NostrSigner,
+  nostr: NostrManager,
+  eventTemplate: EventTemplate,
+  options: FinalizeAndSendOptions = {}
+): Promise<NostrEvent> {
+  const { writeRelays, relays } = getLocalStorageData();
+  const allWriteRelays = withBlastr([...writeRelays, ...relays]);
+
+  const signedEvent = await signer.sign(eventTemplate);
+
+  // Cache to database first and wait for confirmation
+  await cacheEventToDatabase(signedEvent);
+
+  if (options.waitForRelayPublish === false) {
+    void publishEventWithRetryTracking(
+      nostr,
+      signedEvent,
+      allWriteRelays,
+      signer
+    );
+
+    return signedEvent;
+  }
+
+  await publishEventWithRetryTracking(
+    nostr,
+    signedEvent,
+    allWriteRelays,
+    signer
+  );
+
+  return signedEvent;
+}
+
+export type BlossomUploadResponse = {
+  url: string;
+  sha256: string;
+  size: number;
+  type?: string;
+};
+
+export async function blossomUploadImages(
+  image: File,
+  signer: NostrSigner,
+  servers: Request["url"][]
+) {
+  if (!image.type.includes("image"))
+    throw new Error("Only images are supported");
+
+  const arrayBuffer = await image.arrayBuffer();
+  const uint8Array = new Uint8Array(arrayBuffer);
+  const words: number[] = [];
+  for (let i = 0; i < uint8Array.length; i += 4) {
+    words.push(
+      ((uint8Array[i] || 0) << 24) |
+        ((uint8Array[i + 1] || 0) << 16) |
+        ((uint8Array[i + 2] || 0) << 8) |
+        (uint8Array[i + 3] || 0)
+    );
+  }
+  const wordArray = CryptoJS.lib.WordArray.create(words, uint8Array.length);
+  const hash = CryptoJS.SHA256(wordArray).toString(CryptoJS.enc.Hex);
+
+  const event = {
+    kind: 24242,
+    content: `Upload ${image.name}`,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [
+      ["t", "upload"],
+      ["x", hash],
+      ["size", image.size.toString()],
+      [
+        "expiration",
+        Math.floor((Date.now() + 24 * 60 * 60 * 1000) / 1000).toString(),
+      ],
+    ],
+  };
+
+  const signedEvent = await signer!.sign(event);
+
+  const authorization = `Nostr ${CryptoJS.enc.Base64.stringify(
+    CryptoJS.enc.Utf8.parse(JSON.stringify(signedEvent))
+  )}`;
+
+  const validServers = servers
+    .map((s) => {
+      let server = (s || "").trim();
+      if (!server) return null;
+      if (!server.match(/^https?:\/\//i)) {
+        server = `https://${server}`;
+      }
+      try {
+        new URL(server);
+        return server;
+      } catch {
+        return null;
+      }
+    })
+    .filter((s): s is string => s !== null);
+
+  if (validServers.length === 0) {
+    throw new Error(
+      "No valid Blossom servers configured. Please check your media server settings."
+    );
+  }
+
+  let tags: string[][] = [];
+  let responseUrl: string = "";
+  for (let i = 0; i < validServers.length; i++) {
+    const server = validServers[i];
+
+    if (i == 0) {
+      const url = new URL("/upload", server);
+
+      const res = await fetch(url, {
+        method: "PUT",
+        body: image,
+        headers: {
+          authorization,
+          "content-type": image.type,
+        },
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => "Unknown server error");
+        throw new Error(`Upload failed (${res.status}): ${errorText}`);
+      }
+
+      const response = await res.json();
+      // Normalize Blossom responses across top-level and NIP-94 tag formats so uploads always yield a usable URL and metadata.
+      let currentResponseUrl = response.url;
+      let responseType = response.type;
+      let responseSha256 = response.sha256;
+      let responseSize = response.size;
+
+      if (response.nip94_event && response.nip94_event.tags) {
+        const findTag = (tagName: string) => {
+          const tag = response.nip94_event.tags.find(
+            (t: string[]) => t[0] === tagName
+          );
+          return tag ? tag[1] : undefined;
+        };
+        currentResponseUrl = currentResponseUrl || findTag("url");
+        responseSha256 = responseSha256 || findTag("ox") || findTag("x");
+        responseSize = responseSize || findTag("size");
+        responseType = responseType || findTag("m");
+      }
+
+      if (!currentResponseUrl && responseSha256) {
+        currentResponseUrl = new URL(`/${responseSha256}`, server).toString();
+      }
+
+      responseUrl = currentResponseUrl || "";
+
+      if (!responseUrl) {
+        console.error("Blossom upload response missing media URL", {
+          server,
+          responseType,
+          responseSha256,
+          responseSize,
+          hasNip94Tags: Boolean(response.nip94_event?.tags),
+          response,
+        });
+        throw new Error(
+          "Server successfully responded but didn't provide a media URL. Check your configured server URL."
+        );
+      }
+
+      tags = [["url", responseUrl]];
+
+      if (responseSha256) {
+        tags.push(["x", responseSha256], ["ox", responseSha256]);
+      }
+
+      if (
+        responseSize !== undefined &&
+        responseSize !== null &&
+        responseSize !== ""
+      ) {
+        tags.push(["size", responseSize.toString()]);
+      }
+
+      if (responseType) {
+        tags.push(["m", responseType]);
+      }
+    } else {
+      const url = new URL("/mirror", server);
+
+      await fetch(url, {
+        method: "PUT",
+        body: JSON.stringify({
+          url: responseUrl,
+        }),
+        headers: {
+          authorization,
+          "content-type": image.type,
+        },
+      });
+    }
+  }
+  // Cache blossom upload event to database
+  if (signedEvent) {
+    await cacheEventToDatabase(signedEvent).catch((error) =>
+      console.error("Failed to cache blossom upload event to database:", error)
+    );
+  }
+  return tags;
+}
+
+/***** HELPER FUNCTIONS *****/
+
+// function to validate public and private keys
+export function validateNPubKey(publicKey: string) {
+  const validPubKey = /^npub[a-zA-Z0-9]{59}$/;
+  return publicKey.match(validPubKey) !== null;
+}
+export function validateNSecKey(privateKey: string) {
+  const validPrivKey = /^nsec[a-zA-Z0-9]{59}$/;
+  return privateKey.match(validPrivKey) !== null;
+}
+
+const LOCALSTORAGECONSTANTS = {
+  signInMethod: "signInMethod",
+  userNPub: "userNPub",
+  userPubkey: "userPubkey",
+  encryptedPrivateKey: "encryptedPrivateKey",
+  relays: "relays",
+  readRelays: "readRelays",
+  writeRelays: "writeRelays",
+  mints: "mints",
+  blossomServers: "blossomServers",
+  tokens: "tokens",
+  history: "history",
+  wot: "wot",
+  clientPubkey: "clientPubkey",
+  clientPrivkey: "clientPrivkey",
+  bunkerRemotePubkey: "bunkerRemotePubkey",
+  bunkerRelays: "bunkerRelays",
+  bunkerSecret: "bunkerSecret",
+  signer: "signer",
+  nwcString: "nwcString",
+  nwcInfo: "nwcInfo",
+  savedAddresses: "savedAddresses",
+};
+
+export const setLocalStorageDataOnSignIn = ({
+  encryptedPrivateKey,
+  relays,
+  readRelays,
+  writeRelays,
+  mints,
+  blossomServers,
+  wot,
+  clientPubkey,
+  clientPrivkey,
+  bunkerRemotePubkey,
+  bunkerRelays,
+  bunkerSecret,
+  signer,
+  migrationComplete,
+}: {
+  encryptedPrivateKey?: string;
+  relays?: string[];
+  readRelays?: string[];
+  writeRelays?: string[];
+  mints?: string[];
+  blossomServers?: string[];
+  wot?: number;
+  clientPubkey?: string;
+  clientPrivkey?: string;
+  bunkerRemotePubkey?: string;
+  bunkerRelays?: string[];
+  bunkerSecret?: string;
+  signer?: NostrSigner;
+  migrationComplete?: boolean;
+}) => {
+  if (encryptedPrivateKey) {
+    localStorage.setItem(
+      LOCALSTORAGECONSTANTS.encryptedPrivateKey,
+      encryptedPrivateKey
+    );
+  }
+
+  localStorage.setItem(
+    LOCALSTORAGECONSTANTS.relays,
+    JSON.stringify(relays && relays.length != 0 ? relays : getDefaultRelays())
+  );
+
+  localStorage.setItem(
+    LOCALSTORAGECONSTANTS.readRelays,
+    JSON.stringify(readRelays && readRelays.length != 0 ? readRelays : [])
+  );
+
+  localStorage.setItem(
+    LOCALSTORAGECONSTANTS.writeRelays,
+    JSON.stringify(writeRelays && writeRelays.length != 0 ? writeRelays : [])
+  );
+
+  localStorage.setItem(
+    LOCALSTORAGECONSTANTS.mints,
+    JSON.stringify(mints ? mints : [getDefaultMint()])
+  );
+
+  localStorage.setItem(
+    LOCALSTORAGECONSTANTS.blossomServers,
+    JSON.stringify(
+      blossomServers ? blossomServers : [getDefaultBlossomServer()]
+    )
+  );
+
+  localStorage.setItem(LOCALSTORAGECONSTANTS.wot, String(wot ? wot : 3));
+
+  if (clientPubkey && clientPrivkey && bunkerRemotePubkey && bunkerRelays) {
+    localStorage.setItem(LOCALSTORAGECONSTANTS.clientPubkey, clientPubkey);
+    localStorage.setItem(LOCALSTORAGECONSTANTS.clientPrivkey, clientPrivkey);
+    localStorage.setItem(
+      LOCALSTORAGECONSTANTS.bunkerRemotePubkey,
+      bunkerRemotePubkey
+    );
+    localStorage.setItem(
+      LOCALSTORAGECONSTANTS.bunkerRelays,
+      JSON.stringify(
+        bunkerRelays && bunkerRelays.length != 0 ? bunkerRelays : []
+      )
+    );
+    if (bunkerSecret) {
+      localStorage.setItem(LOCALSTORAGECONSTANTS.bunkerSecret, bunkerSecret);
+    }
+  }
+
+  if (signer) {
+    localStorage.setItem(LOCALSTORAGECONSTANTS.signer, JSON.stringify(signer));
+  }
+
+  if (migrationComplete) {
+    localStorage.setItem("migrationComplete", migrationComplete.toString());
+  }
+
+  window.dispatchEvent(new Event("storage"));
+};
+
+export interface LocalStorageInterface {
+  /**
+   * @deprecated
+   */
+  signInMethod: string; // deprecated
+  relays: string[];
+  readRelays: string[];
+  writeRelays: string[];
+  mints: string[];
+  blossomServers: string[];
+  tokens: any[];
+  history: any[];
+  wot: number;
+  encryptedPrivateKey?: string;
+  clientPrivkey?: string;
+  bunkerRemotePubkey?: string;
+  bunkerRelays?: string[];
+  bunkerSecret?: string;
+  signer?:
+    | { type: "nip07" }
+    | { type: "nip46"; bunker: string; appPrivKey?: string }
+    | { type: "nsec"; encryptedPrivKey: string; pubkey?: string };
+  nwcString?: string | null;
+  nwcInfo?: string | null;
+  migrationComplete?: boolean;
+  savedAddresses: SavedAddress[];
+}
+
+function isStoredSignerData(
+  value: unknown
+): value is NonNullable<LocalStorageInterface["signer"]> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const candidate = value as {
+    type?: unknown;
+    bunker?: unknown;
+    appPrivKey?: unknown;
+    encryptedPrivKey?: unknown;
+    pubkey?: unknown;
+  };
+
+  if (candidate.type === "nip07") {
+    return true;
+  }
+
+  if (candidate.type === "nip46") {
+    return (
+      typeof candidate.bunker === "string" &&
+      (candidate.appPrivKey === undefined ||
+        typeof candidate.appPrivKey === "string")
+    );
+  }
+
+  if (candidate.type === "nsec") {
+    return (
+      typeof candidate.encryptedPrivKey === "string" &&
+      (candidate.pubkey === undefined || typeof candidate.pubkey === "string")
+    );
+  }
+
+  return false;
+}
+
+export const getLocalStorageData = (): LocalStorageInterface => {
+  const isStringArray = (value: unknown): value is string[] =>
+    Array.isArray(value) && value.every((entry) => typeof entry === "string");
+  const isArray = (value: unknown): value is unknown[] => Array.isArray(value);
+
+  let signInMethod;
+  let encryptedPrivateKey;
+  let relays;
+  let readRelays;
+  let writeRelays;
+  let mints;
+  let blossomServers;
+  let tokens;
+  let history;
+  let wot;
+  let clientPrivkey;
+  let bunkerRemotePubkey;
+  let bunkerRelays;
+  let bunkerSecret;
+  let signer: LocalStorageInterface["signer"] | undefined;
+  let migrationComplete;
+  let nwcString;
+  let nwcInfo;
+  let savedAddresses: SavedAddress[] = [];
+
+  if (typeof window !== "undefined") {
+    encryptedPrivateKey = localStorage.getItem(
+      LOCALSTORAGECONSTANTS.encryptedPrivateKey
+    );
+
+    signInMethod = localStorage.getItem(LOCALSTORAGECONSTANTS.signInMethod);
+
+    if (signInMethod) {
+      // remove old data
+      localStorage.removeItem("npub");
+      localStorage.removeItem("signIn");
+      localStorage.removeItem("chats");
+      localStorage.removeItem("cashuWalletRelays");
+    }
+
+    relays = getLocalStorageJson<string[]>(LOCALSTORAGECONSTANTS.relays, [], {
+      removeOnError: true,
+      validate: isStringArray,
+    });
+
+    const defaultRelays = getDefaultRelays();
+
+    if (relays && relays.length === 0) {
+      relays = defaultRelays;
+      localStorage.setItem("relays", JSON.stringify(relays));
+    } else {
+      try {
+        if (relays) {
+          relays = relays.filter((r) => r);
+        }
+      } catch {
+        relays = defaultRelays;
+        localStorage.setItem("relays", JSON.stringify(relays));
+      }
+    }
+
+    readRelays = getLocalStorageJson<string[]>(
+      LOCALSTORAGECONSTANTS.readRelays,
+      [],
+      {
+        removeOnError: true,
+        validate: isStringArray,
+      }
+    ).filter((r) => r);
+
+    writeRelays = getLocalStorageJson<string[]>(
+      LOCALSTORAGECONSTANTS.writeRelays,
+      [],
+      {
+        removeOnError: true,
+        validate: isStringArray,
+      }
+    ).filter((r) => r);
+
+    mints = getLocalStorageJson<string[]>(LOCALSTORAGECONSTANTS.mints, [], {
+      removeOnError: true,
+      validate: isStringArray,
+    });
+
+    if (mints.length === 0) {
+      mints = [getDefaultMint()];
+      localStorage.setItem(LOCALSTORAGECONSTANTS.mints, JSON.stringify(mints));
+    }
+
+    blossomServers = getLocalStorageJson<string[]>(
+      LOCALSTORAGECONSTANTS.blossomServers,
+      [],
+      {
+        removeOnError: true,
+        validate: isStringArray,
+      }
+    );
+
+    if (blossomServers.length === 0) {
+      blossomServers = [getDefaultBlossomServer()];
+      localStorage.setItem(
+        LOCALSTORAGECONSTANTS.blossomServers,
+        JSON.stringify(blossomServers)
+      );
+    }
+
+    tokens = getLocalStorageJson<unknown[]>(LOCALSTORAGECONSTANTS.tokens, [], {
+      removeOnError: true,
+      validate: isArray,
+    });
+    if (
+      tokens.length === 0 &&
+      !localStorage.getItem(LOCALSTORAGECONSTANTS.tokens)
+    ) {
+      localStorage.setItem(LOCALSTORAGECONSTANTS.tokens, JSON.stringify([]));
+    }
+
+    history = getLocalStorageJson<unknown[]>(
+      LOCALSTORAGECONSTANTS.history,
+      [],
+      {
+        removeOnError: true,
+        validate: isArray,
+      }
+    );
+    if (
+      history.length === 0 &&
+      !localStorage.getItem(LOCALSTORAGECONSTANTS.history)
+    ) {
+      localStorage.setItem(LOCALSTORAGECONSTANTS.history, JSON.stringify([]));
+    }
+
+    wot = localStorage.getItem(LOCALSTORAGECONSTANTS.wot)
+      ? Number(localStorage.getItem(LOCALSTORAGECONSTANTS.wot))
+      : 3;
+
+    clientPrivkey = localStorage.getItem(LOCALSTORAGECONSTANTS.clientPrivkey)
+      ? localStorage.getItem(LOCALSTORAGECONSTANTS.clientPrivkey)
+      : undefined;
+    bunkerRemotePubkey = localStorage.getItem(
+      LOCALSTORAGECONSTANTS.bunkerRemotePubkey
+    )
+      ? localStorage.getItem(LOCALSTORAGECONSTANTS.bunkerRemotePubkey)
+      : undefined;
+    bunkerRelays = getLocalStorageJson<string[]>(
+      LOCALSTORAGECONSTANTS.bunkerRelays,
+      [],
+      {
+        removeOnError: true,
+        validate: isStringArray,
+      }
+    ).filter((r) => r);
+    bunkerSecret = localStorage.getItem(LOCALSTORAGECONSTANTS.bunkerSecret)
+      ? localStorage.getItem(LOCALSTORAGECONSTANTS.bunkerSecret)
+      : undefined;
+
+    signer = getLocalStorageJson<LocalStorageInterface["signer"] | undefined>(
+      LOCALSTORAGECONSTANTS.signer,
+      undefined,
+      {
+        removeOnError: true,
+        validate: isStoredSignerData,
+      }
+    );
+    if (!signer) {
+      switch (signInMethod) {
+        case "extension":
+          signer = {
+            type: "nip07",
+          };
+          break;
+        case "bunker":
+          let bunker =
+            "bunker://" + bunkerRemotePubkey + "?secret=" + bunkerSecret;
+          for (const relay of bunkerRelays) {
+            bunker += "&relay=" + relay;
+          }
+          signer = {
+            type: "nip46",
+            bunker: bunker,
+            appPrivKey:
+              typeof clientPrivkey === "string" ? clientPrivkey : undefined,
+          };
+          break;
+        case "nsec":
+          if (typeof encryptedPrivateKey === "string") {
+            signer = {
+              type: "nsec",
+              encryptedPrivKey: encryptedPrivateKey,
+            };
+          }
+          break;
+      }
+    }
+
+    nwcString = localStorage.getItem(LOCALSTORAGECONSTANTS.nwcString)
+      ? localStorage.getItem(LOCALSTORAGECONSTANTS.nwcString)
+      : null;
+
+    nwcInfo = localStorage.getItem(LOCALSTORAGECONSTANTS.nwcInfo)
+      ? localStorage.getItem(LOCALSTORAGECONSTANTS.nwcInfo)
+      : null;
+    migrationComplete = localStorage.getItem("migrationComplete") === "true";
+    savedAddresses = getLocalStorageJson<SavedAddress[]>(
+      LOCALSTORAGECONSTANTS.savedAddresses,
+      [],
+      {
+        removeOnError: true,
+        validate: (value): value is SavedAddress[] => Array.isArray(value),
+      }
+    );
+  }
+  return {
+    signInMethod: signInMethod as string,
+    encryptedPrivateKey: encryptedPrivateKey as string,
+    relays: relays || [],
+    readRelays: readRelays || [],
+    writeRelays: writeRelays || [],
+    mints: mints || [],
+    blossomServers: blossomServers || [],
+    tokens: tokens || [],
+    history: history || [],
+    wot: wot || 3,
+    clientPrivkey: clientPrivkey?.toString(),
+    bunkerRemotePubkey: bunkerRemotePubkey?.toString(),
+    bunkerRelays: bunkerRelays || [],
+    bunkerSecret: bunkerSecret?.toString(),
+    signer,
+    nwcString: nwcString as string | null,
+    nwcInfo: nwcInfo as string | null,
+    migrationComplete: migrationComplete || false,
+    savedAddresses,
+  };
+};
+
+export const LogOut = () => {
+  // remove old data
+  localStorage.removeItem("npub");
+  localStorage.removeItem("signIn");
+  localStorage.removeItem("chats");
+  for (const key in LOCALSTORAGECONSTANTS) {
+    localStorage.removeItem(key);
+  }
+
+  window.dispatchEvent(new Event("storage"));
+};
+
+export const decryptNpub = (npub: string): string | null => {
+  try {
+    const decoded = nip19.decode(npub);
+    return decoded.type === "npub" && typeof decoded.data === "string"
+      ? decoded.data
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+export function nostrExtensionLoaded() {
+  if (!window.nostr) {
+    return false;
+  }
+  return true;
+}
+
+export function getDefaultRelays(): string[] {
+  return [
+    "wss://relay.damus.io",
+    "wss://nos.lol",
+    "wss://purplepag.es",
+    "wss://relay.primal.net",
+    "wss://relay.nostr.band",
+  ];
+}
+
+export function withBlastr(relays: string[]): string[] {
+  const out = [...relays];
+
+  const blastrRelay = "wss://sendit.nosflare.com";
+  if (!containsRelay(out, blastrRelay)) {
+    out.push(blastrRelay);
+  }
+  return out;
+}
+
+export function getDefaultMint(): string {
+  return "https://mint.minibits.cash/Bitcoin";
+}
+
+export function getDefaultBlossomServer(): string {
+  return "https://cdn.nostrcheck.me";
+}
+
+export async function verifyNip05Identifier(
+  nip05: string,
+  pubkey: string,
+  options?: { baseUrl?: string }
+): Promise<boolean> {
+  if (!nip05 || !pubkey) return false;
+
+  try {
+    const params = new URLSearchParams({ nip05, pubkey });
+    const path = `/api/nostr/verify-nip05?${params.toString()}`;
+
+    const baseUrl =
+      options?.baseUrl ??
+      (typeof window !== "undefined" ? window.location.origin : null);
+
+    if (!baseUrl && typeof window === "undefined") {
+      throw new Error("verifyNip05Identifier requires baseUrl in SSR");
+    }
+
+    const requestUrl = baseUrl ? new URL(path, baseUrl).toString() : path;
+    const response = await fetch(requestUrl);
+
+    if (!response.ok) return false;
+
+    const data: unknown = await response.json();
+
+    return (
+      typeof data === "object" &&
+      data !== null &&
+      "verified" in data &&
+      (data as { verified?: boolean }).verified === true
+    );
+  } catch {
+    return false;
+  }
+}
+
+export const saveNWCString = (nwcString: string) => {
+  if (nwcString) {
+    localStorage.setItem(LOCALSTORAGECONSTANTS.nwcString, nwcString);
+  } else {
+    localStorage.removeItem(LOCALSTORAGECONSTANTS.nwcString);
+    localStorage.removeItem(LOCALSTORAGECONSTANTS.nwcInfo);
+  }
+  window.dispatchEvent(new Event("storage"));
+};
+
+export const getLocalUserProfileKey = (pubkey: string) =>
+  `shopstr:user-profile:${pubkey}`;
+
+export interface LocalProfileFallback {
+  content: Record<string, unknown>;
+  updatedAt: number;
+}
+
+export const isProfileContentPopulated = (content: Record<string, unknown>) =>
+  Object.values(content).some(
+    (value) => value !== "" && value !== null && value !== undefined
+  );
+
+export const parseLocalProfileFallback = (
+  raw: string | null
+): LocalProfileFallback | null => {
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw);
+
+    // Backward compatibility: previously we stored content directly.
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed) &&
+      !("content" in parsed)
+    ) {
+      return {
+        content: parsed as Record<string, unknown>,
+        updatedAt: 0,
+      };
+    }
+
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed) &&
+      "content" in parsed
+    ) {
+      const fallback = parsed as LocalProfileFallback;
+      return {
+        content: fallback.content || {},
+        updatedAt: fallback.updatedAt || 0,
+      };
+    }
+  } catch (error) {
+    console.error("Failed to parse local profile fallback:", error);
+  }
+
+  return null;
+};
+
+export {
+  getSavedAddresses,
+  saveAddress,
+  deleteAddress,
+  setDefaultAddress,
+} from "@/utils/nostr/saved-address-helpers";
+
 function getContactListRelays(): string[] {
   const { readRelays, writeRelays, relays } = getLocalStorageData();
   return [...new Set([...readRelays, ...writeRelays, ...relays])];
@@ -1277,31 +2118,12 @@ async function persistSignedEvent(
     );
   }
 
-  try {
-    await newPromiseWithTimeout(
-      async (resolve, reject) => {
-        try {
-          await nostr.publish(signedEvent, allWriteRelays);
-          resolve(undefined);
-        } catch (err) {
-          reject(err as Error);
-        }
-      },
-      { timeout: 21000 }
-    );
-  } catch (error) {
-    console.warn(
-      "Relay publish timed out or failed, but event is saved to database:",
-      error
-    );
-    const { trackFailedRelayPublish } = await import("@/utils/db/db-client");
-    await trackFailedRelayPublish(
-      signedEvent.id,
-      signedEvent,
-      allWriteRelays,
-      signer
-    ).catch(console.error);
-  }
+  await publishEventWithRetryTracking(
+    nostr,
+    signedEvent,
+    allWriteRelays,
+    signer
+  );
 }
 
 export function cacheAndPublishSignedEventInBackground(
@@ -1347,775 +2169,3 @@ export async function unfollowUser(
     return null;
   }
 }
-
-export async function finalizeAndSendNostrEvent(
-  signer: NostrSigner,
-  nostr: NostrManager,
-  eventTemplate: EventTemplate
-) {
-  try {
-    const signedEvent = await signer.sign(eventTemplate);
-
-    // Cache to database first and wait for confirmation, then publish with retry tracking.
-    await persistSignedEvent(nostr, signedEvent, signer);
-
-    // return the signed event to caller so we know generated IDs
-    return signedEvent;
-  } catch (error) {
-    // Log the actual error and re-throw it so the calling function knows something went wrong
-    throw error;
-  }
-}
-
-export type BlossomUploadResponse = {
-  url: string;
-  sha256: string;
-  size: number;
-  type?: string;
-};
-
-export async function blossomUploadImages(
-  image: File,
-  signer: NostrSigner,
-  servers: Request["url"][]
-) {
-  if (!image.type.includes("image"))
-    throw new Error("Only images are supported");
-
-  const arrayBuffer = await image.arrayBuffer();
-  const uint8Array = new Uint8Array(arrayBuffer);
-  const words: number[] = [];
-  for (let i = 0; i < uint8Array.length; i += 4) {
-    words.push(
-      ((uint8Array[i] || 0) << 24) |
-        ((uint8Array[i + 1] || 0) << 16) |
-        ((uint8Array[i + 2] || 0) << 8) |
-        (uint8Array[i + 3] || 0)
-    );
-  }
-  const wordArray = CryptoJS.lib.WordArray.create(words, uint8Array.length);
-  const hash = CryptoJS.SHA256(wordArray).toString(CryptoJS.enc.Hex);
-
-  const event = {
-    kind: 24242,
-    content: `Upload ${image.name}`,
-    created_at: Math.floor(Date.now() / 1000),
-    tags: [
-      ["t", "upload"],
-      ["x", hash],
-      ["size", image.size.toString()],
-      [
-        "expiration",
-        Math.floor((Date.now() + 24 * 60 * 60 * 1000) / 1000).toString(),
-      ],
-    ],
-  };
-
-  const signedEvent = await signer!.sign(event);
-
-  const authorization = `Nostr ${CryptoJS.enc.Base64.stringify(
-    CryptoJS.enc.Utf8.parse(JSON.stringify(signedEvent))
-  )}`;
-
-  const validServers = servers
-    .map((s) => {
-      let server = (s || "").trim();
-      if (!server) return null;
-      if (!server.match(/^https?:\/\//i)) {
-        server = `https://${server}`;
-      }
-      try {
-        new URL(server);
-        return server;
-      } catch {
-        return null;
-      }
-    })
-    .filter((s): s is string => s !== null);
-
-  if (validServers.length === 0) {
-    throw new Error(
-      "No valid Blossom servers configured. Please check your media server settings."
-    );
-  }
-
-  let tags: string[][] = [];
-  let responseUrl: string = "";
-  for (let i = 0; i < validServers.length; i++) {
-    const server = validServers[i];
-
-    if (i == 0) {
-      const url = new URL("/upload", server);
-
-      const res = await fetch(url, {
-        method: "PUT",
-        body: image,
-        headers: {
-          authorization,
-          "content-type": image.type,
-        },
-      });
-
-      if (!res.ok) {
-        const errorText = await res.text().catch(() => "Unknown server error");
-        throw new Error(`Upload failed (${res.status}): ${errorText}`);
-      }
-
-      const response = await res.json();
-      // Normalize Blossom responses across top-level and NIP-94 tag formats so uploads always yield a usable URL and metadata.
-      let currentResponseUrl = response.url;
-      let responseType = response.type;
-      let responseSha256 = response.sha256;
-      let responseSize = response.size;
-
-      if (response.nip94_event && response.nip94_event.tags) {
-        const findTag = (tagName: string) => {
-          const tag = response.nip94_event.tags.find(
-            (t: string[]) => t[0] === tagName
-          );
-          return tag ? tag[1] : undefined;
-        };
-        currentResponseUrl = currentResponseUrl || findTag("url");
-        responseSha256 = responseSha256 || findTag("ox") || findTag("x");
-        responseSize = responseSize || findTag("size");
-        responseType = responseType || findTag("m");
-      }
-
-      if (!currentResponseUrl && responseSha256) {
-        currentResponseUrl = new URL(`/${responseSha256}`, server).toString();
-      }
-
-      responseUrl = currentResponseUrl || "";
-
-      if (!responseUrl) {
-        console.error("Blossom upload response missing media URL", {
-          server,
-          responseType,
-          responseSha256,
-          responseSize,
-          hasNip94Tags: Boolean(response.nip94_event?.tags),
-          response,
-        });
-        throw new Error(
-          "Server successfully responded but didn't provide a media URL. Check your configured server URL."
-        );
-      }
-
-      tags = [["url", responseUrl]];
-
-      if (responseSha256) {
-        tags.push(["x", responseSha256], ["ox", responseSha256]);
-      }
-
-      if (
-        responseSize !== undefined &&
-        responseSize !== null &&
-        responseSize !== ""
-      ) {
-        tags.push(["size", responseSize.toString()]);
-      }
-
-      if (responseType) {
-        tags.push(["m", responseType]);
-      }
-    } else {
-      const url = new URL("/mirror", server);
-
-      await fetch(url, {
-        method: "PUT",
-        body: JSON.stringify({
-          url: responseUrl,
-        }),
-        headers: {
-          authorization,
-          "content-type": image.type,
-        },
-      });
-    }
-  }
-  // Cache blossom upload event to database
-  if (signedEvent) {
-    await cacheEventToDatabase(signedEvent).catch((error) =>
-      console.error("Failed to cache blossom upload event to database:", error)
-    );
-  }
-  return tags;
-}
-
-/***** HELPER FUNCTIONS *****/
-
-// function to validate public and private keys
-export function validateNPubKey(publicKey: string) {
-  const validPubKey = /^npub[a-zA-Z0-9]{59}$/;
-  return publicKey.match(validPubKey) !== null;
-}
-export function validateNSecKey(privateKey: string) {
-  const validPrivKey = /^nsec[a-zA-Z0-9]{59}$/;
-  return privateKey.match(validPrivKey) !== null;
-}
-
-const LOCALSTORAGECONSTANTS = {
-  signInMethod: "signInMethod",
-  userNPub: "userNPub",
-  userPubkey: "userPubkey",
-  encryptedPrivateKey: "encryptedPrivateKey",
-  relays: "relays",
-  readRelays: "readRelays",
-  writeRelays: "writeRelays",
-  mints: "mints",
-  blossomServers: "blossomServers",
-  tokens: "tokens",
-  history: "history",
-  wot: "wot",
-  clientPubkey: "clientPubkey",
-  clientPrivkey: "clientPrivkey",
-  bunkerRemotePubkey: "bunkerRemotePubkey",
-  bunkerRelays: "bunkerRelays",
-  bunkerSecret: "bunkerSecret",
-  signer: "signer",
-  nwcString: "nwcString",
-  nwcInfo: "nwcInfo",
-};
-
-export const setLocalStorageDataOnSignIn = ({
-  encryptedPrivateKey,
-  relays,
-  readRelays,
-  writeRelays,
-  mints,
-  blossomServers,
-  wot,
-  clientPubkey,
-  clientPrivkey,
-  bunkerRemotePubkey,
-  bunkerRelays,
-  bunkerSecret,
-  signer,
-  migrationComplete,
-}: {
-  encryptedPrivateKey?: string;
-  relays?: string[];
-  readRelays?: string[];
-  writeRelays?: string[];
-  mints?: string[];
-  blossomServers?: string[];
-  wot?: number;
-  clientPubkey?: string;
-  clientPrivkey?: string;
-  bunkerRemotePubkey?: string;
-  bunkerRelays?: string[];
-  bunkerSecret?: string;
-  signer?: NostrSigner;
-  migrationComplete?: boolean;
-}) => {
-  if (encryptedPrivateKey) {
-    localStorage.setItem(
-      LOCALSTORAGECONSTANTS.encryptedPrivateKey,
-      encryptedPrivateKey
-    );
-  }
-
-  localStorage.setItem(
-    LOCALSTORAGECONSTANTS.relays,
-    JSON.stringify(relays && relays.length != 0 ? relays : getDefaultRelays())
-  );
-
-  localStorage.setItem(
-    LOCALSTORAGECONSTANTS.readRelays,
-    JSON.stringify(readRelays && readRelays.length != 0 ? readRelays : [])
-  );
-
-  localStorage.setItem(
-    LOCALSTORAGECONSTANTS.writeRelays,
-    JSON.stringify(writeRelays && writeRelays.length != 0 ? writeRelays : [])
-  );
-
-  localStorage.setItem(
-    LOCALSTORAGECONSTANTS.mints,
-    JSON.stringify(mints ? mints : [getDefaultMint()])
-  );
-
-  localStorage.setItem(
-    LOCALSTORAGECONSTANTS.blossomServers,
-    JSON.stringify(
-      blossomServers ? blossomServers : [getDefaultBlossomServer()]
-    )
-  );
-
-  localStorage.setItem(LOCALSTORAGECONSTANTS.wot, String(wot ? wot : 3));
-
-  if (clientPubkey && clientPrivkey && bunkerRemotePubkey && bunkerRelays) {
-    localStorage.setItem(LOCALSTORAGECONSTANTS.clientPubkey, clientPubkey);
-    localStorage.setItem(LOCALSTORAGECONSTANTS.clientPrivkey, clientPrivkey);
-    localStorage.setItem(
-      LOCALSTORAGECONSTANTS.bunkerRemotePubkey,
-      bunkerRemotePubkey
-    );
-    localStorage.setItem(
-      LOCALSTORAGECONSTANTS.bunkerRelays,
-      JSON.stringify(
-        bunkerRelays && bunkerRelays.length != 0 ? bunkerRelays : []
-      )
-    );
-    if (bunkerSecret) {
-      localStorage.setItem(LOCALSTORAGECONSTANTS.bunkerSecret, bunkerSecret);
-    }
-  }
-
-  if (signer) {
-    localStorage.setItem(LOCALSTORAGECONSTANTS.signer, JSON.stringify(signer));
-  }
-
-  if (migrationComplete) {
-    localStorage.setItem("migrationComplete", migrationComplete.toString());
-  }
-
-  window.dispatchEvent(new Event("storage"));
-};
-
-export interface LocalStorageInterface {
-  /**
-   * @deprecated
-   */
-  signInMethod: string; // deprecated
-  relays: string[];
-  readRelays: string[];
-  writeRelays: string[];
-  mints: string[];
-  blossomServers: string[];
-  tokens: any[];
-  history: any[];
-  wot: number;
-  encryptedPrivateKey?: string;
-  clientPrivkey?: string;
-  bunkerRemotePubkey?: string;
-  bunkerRelays?: string[];
-  bunkerSecret?: string;
-  signer?:
-    | { type: "nip07" }
-    | { type: "nip46"; bunker: string; appPrivKey?: string }
-    | { type: "nsec"; encryptedPrivKey: string; pubkey?: string };
-  nwcString?: string | null;
-  nwcInfo?: string | null;
-  migrationComplete?: boolean;
-}
-
-function isStoredSignerData(
-  value: unknown
-): value is NonNullable<LocalStorageInterface["signer"]> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
-
-  const candidate = value as {
-    type?: unknown;
-    bunker?: unknown;
-    appPrivKey?: unknown;
-    encryptedPrivKey?: unknown;
-    pubkey?: unknown;
-  };
-
-  if (candidate.type === "nip07") {
-    return true;
-  }
-
-  if (candidate.type === "nip46") {
-    return (
-      typeof candidate.bunker === "string" &&
-      (candidate.appPrivKey === undefined ||
-        typeof candidate.appPrivKey === "string")
-    );
-  }
-
-  if (candidate.type === "nsec") {
-    return (
-      typeof candidate.encryptedPrivKey === "string" &&
-      (candidate.pubkey === undefined || typeof candidate.pubkey === "string")
-    );
-  }
-
-  return false;
-}
-
-export const getLocalStorageData = (): LocalStorageInterface => {
-  const isStringArray = (value: unknown): value is string[] =>
-    Array.isArray(value) && value.every((entry) => typeof entry === "string");
-  const isArray = (value: unknown): value is unknown[] => Array.isArray(value);
-
-  let signInMethod;
-  let encryptedPrivateKey;
-  let relays;
-  let readRelays;
-  let writeRelays;
-  let mints;
-  let blossomServers;
-  let tokens;
-  let history;
-  let wot;
-  let clientPrivkey;
-  let bunkerRemotePubkey;
-  let bunkerRelays;
-  let bunkerSecret;
-  let signer: LocalStorageInterface["signer"] | undefined;
-  let migrationComplete;
-  let nwcString;
-  let nwcInfo;
-
-  if (typeof window !== "undefined") {
-    encryptedPrivateKey = localStorage.getItem(
-      LOCALSTORAGECONSTANTS.encryptedPrivateKey
-    );
-
-    signInMethod = localStorage.getItem(LOCALSTORAGECONSTANTS.signInMethod);
-
-    if (signInMethod) {
-      // remove old data
-      localStorage.removeItem("npub");
-      localStorage.removeItem("signIn");
-      localStorage.removeItem("chats");
-      localStorage.removeItem("cashuWalletRelays");
-    }
-
-    relays = getLocalStorageJson<string[]>(LOCALSTORAGECONSTANTS.relays, [], {
-      removeOnError: true,
-      validate: isStringArray,
-    });
-
-    const defaultRelays = getDefaultRelays();
-
-    if (relays && relays.length === 0) {
-      relays = defaultRelays;
-      localStorage.setItem("relays", JSON.stringify(relays));
-    } else {
-      try {
-        if (relays) {
-          relays = relays.filter((r) => r);
-        }
-      } catch {
-        relays = defaultRelays;
-        localStorage.setItem("relays", JSON.stringify(relays));
-      }
-    }
-
-    readRelays = getLocalStorageJson<string[]>(
-      LOCALSTORAGECONSTANTS.readRelays,
-      [],
-      {
-        removeOnError: true,
-        validate: isStringArray,
-      }
-    ).filter((r) => r);
-
-    writeRelays = getLocalStorageJson<string[]>(
-      LOCALSTORAGECONSTANTS.writeRelays,
-      [],
-      {
-        removeOnError: true,
-        validate: isStringArray,
-      }
-    ).filter((r) => r);
-
-    mints = getLocalStorageJson<string[]>(LOCALSTORAGECONSTANTS.mints, [], {
-      removeOnError: true,
-      validate: isStringArray,
-    });
-
-    if (mints.length === 0) {
-      mints = [getDefaultMint()];
-      localStorage.setItem(LOCALSTORAGECONSTANTS.mints, JSON.stringify(mints));
-    }
-
-    blossomServers = getLocalStorageJson<string[]>(
-      LOCALSTORAGECONSTANTS.blossomServers,
-      [],
-      {
-        removeOnError: true,
-        validate: isStringArray,
-      }
-    );
-
-    if (blossomServers.length === 0) {
-      blossomServers = [getDefaultBlossomServer()];
-      localStorage.setItem(
-        LOCALSTORAGECONSTANTS.blossomServers,
-        JSON.stringify(blossomServers)
-      );
-    }
-
-    tokens = getLocalStorageJson<unknown[]>(LOCALSTORAGECONSTANTS.tokens, [], {
-      removeOnError: true,
-      validate: isArray,
-    });
-    if (
-      tokens.length === 0 &&
-      !localStorage.getItem(LOCALSTORAGECONSTANTS.tokens)
-    ) {
-      localStorage.setItem(LOCALSTORAGECONSTANTS.tokens, JSON.stringify([]));
-    }
-
-    history = getLocalStorageJson<unknown[]>(
-      LOCALSTORAGECONSTANTS.history,
-      [],
-      {
-        removeOnError: true,
-        validate: isArray,
-      }
-    );
-    if (
-      history.length === 0 &&
-      !localStorage.getItem(LOCALSTORAGECONSTANTS.history)
-    ) {
-      localStorage.setItem(LOCALSTORAGECONSTANTS.history, JSON.stringify([]));
-    }
-
-    wot = localStorage.getItem(LOCALSTORAGECONSTANTS.wot)
-      ? Number(localStorage.getItem(LOCALSTORAGECONSTANTS.wot))
-      : 3;
-
-    clientPrivkey = localStorage.getItem(LOCALSTORAGECONSTANTS.clientPrivkey)
-      ? localStorage.getItem(LOCALSTORAGECONSTANTS.clientPrivkey)
-      : undefined;
-    bunkerRemotePubkey = localStorage.getItem(
-      LOCALSTORAGECONSTANTS.bunkerRemotePubkey
-    )
-      ? localStorage.getItem(LOCALSTORAGECONSTANTS.bunkerRemotePubkey)
-      : undefined;
-    bunkerRelays = getLocalStorageJson<string[]>(
-      LOCALSTORAGECONSTANTS.bunkerRelays,
-      [],
-      {
-        removeOnError: true,
-        validate: isStringArray,
-      }
-    ).filter((r) => r);
-    bunkerSecret = localStorage.getItem(LOCALSTORAGECONSTANTS.bunkerSecret)
-      ? localStorage.getItem(LOCALSTORAGECONSTANTS.bunkerSecret)
-      : undefined;
-
-    signer = getLocalStorageJson<LocalStorageInterface["signer"] | undefined>(
-      LOCALSTORAGECONSTANTS.signer,
-      undefined,
-      {
-        removeOnError: true,
-        validate: isStoredSignerData,
-      }
-    );
-    if (!signer) {
-      switch (signInMethod) {
-        case "extension":
-          signer = {
-            type: "nip07",
-          };
-          break;
-        case "bunker":
-          let bunker =
-            "bunker://" + bunkerRemotePubkey + "?secret=" + bunkerSecret;
-          for (const relay of bunkerRelays) {
-            bunker += "&relay=" + relay;
-          }
-          signer = {
-            type: "nip46",
-            bunker: bunker,
-            appPrivKey:
-              typeof clientPrivkey === "string" ? clientPrivkey : undefined,
-          };
-          break;
-        case "nsec":
-          if (typeof encryptedPrivateKey === "string") {
-            signer = {
-              type: "nsec",
-              encryptedPrivKey: encryptedPrivateKey,
-            };
-          }
-          break;
-      }
-    }
-
-    nwcString = localStorage.getItem(LOCALSTORAGECONSTANTS.nwcString)
-      ? localStorage.getItem(LOCALSTORAGECONSTANTS.nwcString)
-      : null;
-
-    nwcInfo = localStorage.getItem(LOCALSTORAGECONSTANTS.nwcInfo)
-      ? localStorage.getItem(LOCALSTORAGECONSTANTS.nwcInfo)
-      : null;
-    migrationComplete = localStorage.getItem("migrationComplete") === "true";
-  }
-  return {
-    signInMethod: signInMethod as string,
-    encryptedPrivateKey: encryptedPrivateKey as string,
-    relays: relays || [],
-    readRelays: readRelays || [],
-    writeRelays: writeRelays || [],
-    mints: mints || [],
-    blossomServers: blossomServers || [],
-    tokens: tokens || [],
-    history: history || [],
-    wot: wot || 3,
-    clientPrivkey: clientPrivkey?.toString(),
-    bunkerRemotePubkey: bunkerRemotePubkey?.toString(),
-    bunkerRelays: bunkerRelays || [],
-    bunkerSecret: bunkerSecret?.toString(),
-    signer,
-    nwcString: nwcString as string | null,
-    nwcInfo: nwcInfo as string | null,
-    migrationComplete: migrationComplete || false,
-  };
-};
-
-export const LogOut = () => {
-  // remove old data
-  localStorage.removeItem("npub");
-  localStorage.removeItem("signIn");
-  localStorage.removeItem("chats");
-  for (const key in LOCALSTORAGECONSTANTS) {
-    localStorage.removeItem(key);
-  }
-
-  window.dispatchEvent(new Event("storage"));
-};
-
-export const decryptNpub = (npub: string): string | null => {
-  try {
-    const decoded = nip19.decode(npub);
-    return decoded.type === "npub" && typeof decoded.data === "string"
-      ? decoded.data
-      : null;
-  } catch {
-    return null;
-  }
-};
-
-export function nostrExtensionLoaded() {
-  if (!window.nostr) {
-    return false;
-  }
-  return true;
-}
-
-export function getDefaultRelays(): string[] {
-  return [
-    "wss://relay.damus.io",
-    "wss://nos.lol",
-    "wss://purplepag.es",
-    "wss://relay.primal.net",
-    "wss://relay.nostr.band",
-  ];
-}
-
-export function withBlastr(relays: string[]): string[] {
-  const out = [...relays];
-
-  const blastrRelay = "wss://sendit.nosflare.com";
-  if (!containsRelay(out, blastrRelay)) {
-    out.push(blastrRelay);
-  }
-  return out;
-}
-
-export function getDefaultMint(): string {
-  return "https://mint.minibits.cash/Bitcoin";
-}
-
-export function getDefaultBlossomServer(): string {
-  return "https://cdn.nostrcheck.me";
-}
-
-export async function verifyNip05Identifier(
-  nip05: string,
-  pubkey: string,
-  options?: { baseUrl?: string }
-): Promise<boolean> {
-  if (!nip05 || !pubkey) return false;
-
-  try {
-    const params = new URLSearchParams({ nip05, pubkey });
-    const path = `/api/nostr/verify-nip05?${params.toString()}`;
-
-    const baseUrl =
-      options?.baseUrl ??
-      (typeof window !== "undefined" ? window.location.origin : null);
-
-    if (!baseUrl && typeof window === "undefined") {
-      throw new Error("verifyNip05Identifier requires baseUrl in SSR");
-    }
-
-    const requestUrl = baseUrl ? new URL(path, baseUrl).toString() : path;
-    const response = await fetch(requestUrl);
-
-    if (!response.ok) return false;
-
-    const data: unknown = await response.json();
-
-    return (
-      typeof data === "object" &&
-      data !== null &&
-      "verified" in data &&
-      (data as { verified?: boolean }).verified === true
-    );
-  } catch {
-    return false;
-  }
-}
-
-export const saveNWCString = (nwcString: string) => {
-  if (nwcString) {
-    localStorage.setItem(LOCALSTORAGECONSTANTS.nwcString, nwcString);
-  } else {
-    localStorage.removeItem(LOCALSTORAGECONSTANTS.nwcString);
-    localStorage.removeItem(LOCALSTORAGECONSTANTS.nwcInfo);
-  }
-  window.dispatchEvent(new Event("storage"));
-};
-
-export const getLocalUserProfileKey = (pubkey: string) =>
-  `shopstr:user-profile:${pubkey}`;
-
-export interface LocalProfileFallback {
-  content: Record<string, unknown>;
-  updatedAt: number;
-}
-
-export const isProfileContentPopulated = (content: Record<string, unknown>) =>
-  Object.values(content).some(
-    (value) => value !== "" && value !== null && value !== undefined
-  );
-
-export const parseLocalProfileFallback = (
-  raw: string | null
-): LocalProfileFallback | null => {
-  if (!raw) return null;
-
-  try {
-    const parsed = JSON.parse(raw);
-
-    // Backward compatibility: previously we stored content directly.
-    if (
-      parsed &&
-      typeof parsed === "object" &&
-      !Array.isArray(parsed) &&
-      !("content" in parsed)
-    ) {
-      return {
-        content: parsed as Record<string, unknown>,
-        updatedAt: 0,
-      };
-    }
-
-    if (
-      parsed &&
-      typeof parsed === "object" &&
-      !Array.isArray(parsed) &&
-      "content" in parsed
-    ) {
-      const fallback = parsed as LocalProfileFallback;
-      return {
-        content: fallback.content || {},
-        updatedAt: fallback.updatedAt || 0,
-      };
-    }
-  } catch (error) {
-    console.error("Failed to parse local profile fallback:", error);
-  }
-
-  return null;
-};

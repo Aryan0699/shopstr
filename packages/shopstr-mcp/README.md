@@ -3,9 +3,9 @@
 Standalone read-only MCP server package for Shopstr marketplace data.
 
 This package currently contains the standalone MCP shell, shared read-only
-infrastructure, relay-backed product/review tools, and relay-backed
-seller/storefront/reputation tools for public Shopstr marketplace data. Prompt
-and resource features will be added in follow-up PRs.
+infrastructure, relay-backed product/review tools, relay-backed
+seller/storefront/reputation tools, compact market resources, and guided
+shopping prompts for public Shopstr marketplace data.
 
 ## Current Scope
 
@@ -17,8 +17,11 @@ and resource features will be added in follow-up PRs.
   `search_products`, `get_product_details`, `get_reviews`,
   `list_companies`, `get_company_details`, `get_storefront`,
   and `get_seller_reputation`.
-- Registers disabled resource and prompt placeholders so `resources/list` and
-  `prompts/list` return valid empty lists until those features are added.
+- Registers compact market resources:
+  `shopstr://market/summary` and `shopstr://market/categories`.
+- Registers guided shopping prompts:
+  `find-best-deal`, `compare-sellers`, `check-seller-reputation`,
+  and `find-similar-products`.
 - Provides reusable infrastructure modules for upcoming tools:
   `nostr-manager`, `relay-fetch`, `parse-tags`, `dedup`, `validation`,
   `errors`, `timeout`, `audit-log`, and `cache`.
@@ -68,6 +71,28 @@ Seller/profile tools receive a process-local in-memory profile cache through
 the shared tool context. The cache stores parsed public profile/shop responses
 by pubkey and event kind, expires entries by TTL, and surfaces per-kind cache
 hits in `_meta.cached`.
+
+## Resources
+
+- `shopstr://market/summary`: compact marketplace overview with total listing
+  count, active seller count, top categories, price ranges by currency, newest
+  listing timestamp, relay metadata, and agent hints.
+- `shopstr://market/categories`: token-light category index with listing counts
+  for targeted `search_products({ category })` calls.
+
+Resource responses are JSON, exclude hidden listings, include relay degradation
+metadata in `_meta`, and use `SHOPSTR_MCP_RESOURCE_CACHE_TTL_MS` for
+process-local caching.
+
+## Prompts
+
+- `find-best-deal`: searches within a budget and asks the agent to combine
+  product pricing with seller reputation signals.
+- `compare-sellers`: compares seller catalogs, shop metadata, shipping/payment
+  context, and reputation.
+- `check-seller-reputation`: guides a buyer-facing trust check for a seller.
+- `find-similar-products`: starts from a product reference and finds comparable
+  alternatives.
 
 ## Usage
 

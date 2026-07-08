@@ -67,8 +67,23 @@ test("registers and calls PR4 read tools", async () => {
       "list_companies",
       "search_products",
     ]);
-    assert.deepEqual(await client.listResources(), { resources: [] });
-    assert.deepEqual(await client.listPrompts(), { prompts: [] });
+    assert.deepEqual(
+      (await client.listResources()).resources
+        .map((resource) => resource.uri)
+        .sort(),
+      ["shopstr://market/categories", "shopstr://market/summary"]
+    );
+    assert.deepEqual(
+      (await client.listPrompts()).prompts
+        .map((prompt) => prompt.name)
+        .sort(),
+      [
+        "check-seller-reputation",
+        "compare-sellers",
+        "find-best-deal",
+        "find-similar-products",
+      ]
+    );
 
     const result = await client.callTool({
       name: "search_products",

@@ -1906,6 +1906,8 @@ export {
   setDefaultAddress,
 } from "@/utils/nostr/saved-address-helpers";
 
+// ------------------------------------------------------
+
 function getContactListRelays(): string[] {
   const { readRelays, writeRelays, relays } = getLocalStorageData();
   return [...new Set([...readRelays, ...writeRelays, ...relays])];
@@ -1935,7 +1937,7 @@ async function withContactListFetchTimeout<T>(
 async function fetchLatestContactListEvent(
   nostr: NostrManager,
   userPubkey: string
-): Promise<{ event: NostrEvent | null; anySourceResponded: boolean }> {
+): Promise<{ event: NostrEvent | null; confirmedEmpty: boolean; }> {
   const localEvent = latestLocalContactListEvents.get(userPubkey) ?? null;
 
   // Fetch from relays and DB cache in parallel
@@ -1948,7 +1950,7 @@ async function fetchLatestContactListEvent(
       );
 
       console.log(
-        `[follows] contact-list relay ${relay} responded=${result.didRespond} events=${result.value.length}`
+        `[follows] contact-list relay ${relay} responded=${result.didRespond} events=${result.value.length} event=${JSON.stringify(result)}`
       );
 
       return result;
@@ -1981,39 +1983,58 @@ async function fetchLatestContactListEvent(
   ]);
 
   const relayEvents = relayResults.flatMap((result) => result.value);
-  const relayDidRespond = relayResults.some((result) => result.didRespond);
+  const relayFullyResponded =
+  relays.length > 0 && relayResults.every((r) => r.didRespond);
 
-  // A source "responded" if relay or DB actually returned (not timed out),
-  // or if we have a local event from a prior mutation this session.
-  const anySourceResponded =
-    relayDidRespond || dbFetch.didRespond || localEvent !== null;
+
+  // // A source "responded" if relay or DB actually returned (not timed out),
+  // // or if we have a local event from a prior mutation this session.
+  // const anySourceResponded =
+  //   relayDidRespond || dbFetch.didRespond || localEvent !== null;
 
   const dbEvent = dbFetch.value;
-
+  console.warn(`[follows] relay-events = ${relayEvents} dbEvent = ${dbEvent} localEvent = ${localEvent}`);
+  console.warn(`[follows] contact-list fetch results: relayEvents=${relayEvents.length} dbEvent=${dbEvent ? 1 : 0} localEvent=${localEvent ? 1 : 0} relayFullyResponded=${relayFullyResponded} dbFetch.didRespond=${dbFetch.didRespond}`);
   // Merge external sources first, then prefer the local signed event on ties so
   // queued user actions build from the latest local intent.
   const allEvents = [...relayEvents];
   if (dbEvent && dbEvent.id) {
     allEvents.push(dbEvent);
   }
+  
+  console.warn(`[follows] allEvents = ${allEvents}`);
   const externalEvent = pickPreferredReplaceableEvent(
     allEvents as NostrEvent[]
   );
+  console.warn(`[follows] externalEvent = ${externalEvent}`);
+
+  // DB "responded null" means "no cached row" — a cold-cache signal, not
+  // "confirmed zero follows." Only a relay set that fully responded with
+  // zero kind:3 events is a real confirmation of emptiness.
+
+  console.warn(`[follows] ${!externalEvent} && ${!localEvent} && ${dbFetch.didRespond} && ${relayFullyResponded} && ${relayEvents.length === 0}`);
+  const confirmedEmpty =
+    !externalEvent &&
+    !localEvent &&
+    // dbFetch.didRespond &&
+    relayFullyResponded &&
+    relayEvents.length === 0;
 
   if (
     localEvent &&
     localEvent.id &&
     (!externalEvent || localEvent.created_at >= externalEvent.created_at)
   ) {
-    return { event: localEvent, anySourceResponded };
+    console.warn(`Returning localEvent`);
+    return { event: localEvent, confirmedEmpty };
   }
-
-  return { event: externalEvent, anySourceResponded };
+  console.warn(`Returning externalEvent`);
+  return { event: externalEvent, confirmedEmpty };
 }
 
 function getNextContactListCreatedAt(latestEvent: NostrEvent | null): number {
   const now = Math.floor(Date.now() / 1000);
-  return latestEvent ? Math.max(now, latestEvent.created_at + 1) : now;
+  return latestEvent ? Math.max(now, Number(latestEvent.created_at) + 1) : now;
 }
 
 function enqueueContactListMutation(
@@ -2045,19 +2066,25 @@ async function mutateContactList(
   if (action === "follow" && userPubkey === targetPubkey) return null;
 
   return enqueueContactListMutation(userPubkey, async () => {
-    const { event: latestEvent, anySourceResponded } =
+    const { event: latestEvent, confirmedEmpty } =
       await fetchLatestContactListEvent(nostr, userPubkey);
 
+    console.warn(`[follows] mutateContactList: latestEvent=${latestEvent} confirmedEmpty=${confirmedEmpty}`);
     // If no source responded (relay timed out, DB timed out, no local cache)
     // and we have no existing state to build from, refuse the mutation to
     // avoid creating a fresh contact list that would overwrite the user's
     // real follows stored on relays.
-    if (!latestEvent && !anySourceResponded) {
-      console.warn(
-        "Contact list mutation refused: could not reach relays or database. " +
-          "Try again when connectivity is restored."
-      );
-      return null;
+    // need to convey on ui as well
+    if (!latestEvent) {
+      if (!confirmedEmpty) {
+        console.warn(
+          "Contact list mutation refused: could not confirm whether the user " +
+            "truly has zero follows (DB miss and/or incomplete relay coverage). " +
+            "Refusing rather than risk overwriting an existing list."
+        );
+        return null;
+      }
+      // genuinely new user, safe to build fresh
     }
 
     const existingTags = latestEvent?.tags ?? [];
@@ -2087,9 +2114,11 @@ async function mutateContactList(
       content: existingContent,
     };
 
+    console.warn(`[follows] Signing event: ${JSON.stringify(eventTemplate)}`);
     const signedEvent = await signNostrEvent(signer, eventTemplate);
     latestLocalContactListEvents.set(userPubkey, signedEvent);
     cacheAndPublishSignedEventInBackground(nostr, signedEvent, signer);
+    console.warn(`[follow] cached and published signed event`);
     return signedEvent;
   });
 }

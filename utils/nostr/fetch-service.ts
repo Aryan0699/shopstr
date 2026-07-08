@@ -32,7 +32,7 @@ import { calculateWeightedScore } from "@/utils/parsers/review-parser-functions"
 import { hashToCurve } from "@cashu/cashu-ts";
 import { NostrManager } from "@/utils/nostr/nostr-manager";
 import { NostrSigner } from "@/utils/nostr/signers/nostr-signer";
-import { cacheEventsToDatabase } from "@/utils/db/db-client";
+import { cacheEventsToDatabase, cacheEventToDatabase } from "@/utils/db/db-client";
 import { mapWithConcurrency } from "@/utils/concurrency";
 import {
   applyWalletConfigContent,
@@ -1320,6 +1320,7 @@ export const fetchAllFollows = async (
 }> => {
   const wot = getLocalStorageData().wot;
 
+  // this is correct, if userPubkey is not defined, we return empty lists and set isLoading to false
   if (!userPubkey) {
     editFollowsContext([], [], 0, false);
     return {
@@ -1383,17 +1384,30 @@ export const fetchAllFollows = async (
 
   const fetchFollows = async (authorPubkey: string) => {
     // fetch first-degree follows
-    const fetchedFirstDegreeEvents = await nostr.fetch(
-      [
-        {
-          kinds: [3],
-          authors: [authorPubkey],
-        },
-      ],
-      {},
-      relays
-    );
+    let fetchedFirstDegreeEvents: NostrEvent[] = [];
+    try {
+      fetchedFirstDegreeEvents = (
+        await nostr.fetch(
+        [{ kinds: [3], authors: [authorPubkey] }],
+        {},
+        relays
+      )) as NostrEvent[];
+      console.warn(
+        `Fetched first-degree events: ${fetchedFirstDegreeEvents.length}`,
+        fetchedFirstDegreeEvents
+      );
+    } catch (error) {
+      console.error(
+        "Relay fetch for first-degree follows failed, falling back to DB:",
+        error
+      );
+      // fetchedFirstDegreeEvents remains empty, preventing the crash
+    }
 
+    console.warn(
+      `Fetched first-degree events: ${fetchedFirstDegreeEvents.length}`,
+      fetchedFirstDegreeEvents
+    );
     // Merge DB cached event with relay events to pick the latest
     const allFirstDegreeEvents = [...fetchedFirstDegreeEvents];
     if (
@@ -1404,30 +1418,70 @@ export const fetchAllFollows = async (
       allFirstDegreeEvents.push(dbContactListEvent);
     }
 
+    console.warn(
+      `After db merge follow list is ${allFirstDegreeEvents.length}`,
+      allFirstDegreeEvents
+    );
     const latestFirstDegreeEvent = pickPreferredReplaceableEvent(
       allFirstDegreeEvents as NostrEvent[]
     );
 
+    console.warn(
+      `After filtering follow list is ${latestFirstDegreeEvent ? 1 : 0}`,
+      latestFirstDegreeEvent
+    );
+
+    // *** OPPORTUNISTIC CACHING IN THE READ PATH ***
+    if (
+      latestFirstDegreeEvent && 
+      (!dbContactListEvent || latestFirstDegreeEvent.created_at > dbContactListEvent.created_at)
+    ) {
+      // Background cache the relay data so the next page load is instant
+      cacheEventToDatabase(latestFirstDegreeEvent).catch(err => 
+        console.error("Failed to cache initial contact list:", err)
+      );
+    }
+    // **********************************************
+    
     const directFollowList = latestFirstDegreeEvent
       ? Array.from(new Set(extractValidFollowTags(latestFirstDegreeEvent.tags)))
       : [];
 
     const firstDegreeFollowsLength = directFollowList.length;
+    console.log("Final directFollowList:", directFollowList);
+
+    if (directFollowList.length > 0) {
+      editFollowsContext(
+        directFollowList,
+        directFollowList, // Temporarily use this for both until 2nd-degree finishes
+        firstDegreeFollowsLength,
+        true // Keep loading state true because 2nd-degree is still fetching
+      );
+    }
+
     const followsSet: Set<string> = new Set(directFollowList);
     let secondDegreeFollowsArrayFromRelay: string[] = [];
 
     // Fetch second-degree follows
     if (directFollowList.length > 0) {
-      const fetchedSecondDegreeEvents = await nostr.fetch(
-        [
-          {
-            kinds: [3],
-            authors: directFollowList,
-          },
-        ],
-        {},
-        relays
-      );
+      let fetchedSecondDegreeEvents: NostrEvent[] = []; // 1. Declare outside the try block
+      
+      try {
+        // 2. Wrap the fetch
+        fetchedSecondDegreeEvents = (await nostr.fetch(
+          [
+            {
+              kinds: [3],
+              authors: directFollowList,
+            },
+          ],
+          {},
+          relays
+        )) as NostrEvent[];
+      } catch (error) {
+        // 3. Catch and ignore the timeout
+        console.error("Relay fetch for second-degree follows failed:", error);
+      }
 
       for (const followEvent of getLatestEventByAuthor(
         fetchedSecondDegreeEvents as NostrEvent[]

@@ -1993,7 +1993,7 @@ async function fetchLatestContactListEvent(
   //   relayDidRespond || dbFetch.didRespond || localEvent !== null;
 
   const dbEvent = dbFetch.value;
-  console.warn(`[follows] relay-events = ${relayEvents} dbEvent = ${dbEvent} localEvent = ${localEvent}`);
+  console.warn(`[follows] relay-events = ${JSON.stringify(relayEvents)} dbEvent = ${JSON.stringify(dbEvent)} localEvent = ${JSON.stringify(localEvent)}`);
   console.warn(`[follows] contact-list fetch results: relayEvents=${relayEvents.length} dbEvent=${dbEvent ? 1 : 0} localEvent=${localEvent ? 1 : 0} relayFullyResponded=${relayFullyResponded} dbFetch.didRespond=${dbFetch.didRespond}`);
   // Merge external sources first, then prefer the local signed event on ties so
   // queued user actions build from the latest local intent.
@@ -2002,11 +2002,11 @@ async function fetchLatestContactListEvent(
     allEvents.push(dbEvent);
   }
   
-  console.warn(`[follows] allEvents = ${allEvents}`);
+  console.warn(`[follows] allEvents = ${JSON.stringify(allEvents)}`);
   const externalEvent = pickPreferredReplaceableEvent(
     allEvents as NostrEvent[]
   );
-  console.warn(`[follows] externalEvent = ${externalEvent}`);
+  console.warn(`[follows] externalEvent = ${JSON.stringify(externalEvent)}`);
 
   // DB "responded null" means "no cached row" — a cold-cache signal, not
   // "confirmed zero follows." Only a relay set that fully responded with
@@ -2019,6 +2019,8 @@ async function fetchLatestContactListEvent(
     // dbFetch.didRespond &&
     relayFullyResponded &&
     relayEvents.length === 0;
+
+    console.log(localEvent?.created_at, externalEvent?.created_at, confirmedEmpty);
 
   if (
     localEvent &&
@@ -2069,7 +2071,7 @@ async function mutateContactList(
     const { event: latestEvent, confirmedEmpty } =
       await fetchLatestContactListEvent(nostr, userPubkey);
 
-    console.warn(`[follows] mutateContactList: latestEvent=${latestEvent} confirmedEmpty=${confirmedEmpty}`);
+    console.warn(`[follows] mutateContactList: latestEvent=${JSON.stringify(latestEvent)} confirmedEmpty=${confirmedEmpty}`);
     // If no source responded (relay timed out, DB timed out, no local cache)
     // and we have no existing state to build from, refuse the mutation to
     // avoid creating a fresh contact list that would overwrite the user's
@@ -2117,7 +2119,7 @@ async function mutateContactList(
     console.warn(`[follows] Signing event: ${JSON.stringify(eventTemplate)}`);
     const signedEvent = await signNostrEvent(signer, eventTemplate);
     latestLocalContactListEvents.set(userPubkey, signedEvent);
-    cacheAndPublishSignedEventInBackground(nostr, signedEvent, signer);
+    await cacheAndPublishSignedEventInBackground(nostr, signedEvent, signer);
     console.warn(`[follow] cached and published signed event`);
     return signedEvent;
   });

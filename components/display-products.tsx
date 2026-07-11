@@ -205,7 +205,10 @@ const DisplayProducts = ({
     wotFilter,
     followsContext.isLoading,
     followsContext.followList,
-  , nip50ProductEvents, selectedSearch]);
+    ,
+    nip50ProductEvents,
+    selectedSearch,
+  ]);
 
   useEffect(() => {
     if (focusedPubkey && setCategories) {

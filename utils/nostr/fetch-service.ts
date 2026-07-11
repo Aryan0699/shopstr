@@ -1384,6 +1384,7 @@ export const fetchAllFollows = async (
 
   const fetchFollows = async (authorPubkey: string) => {
     // fetch first-degree follows
+    console.warn("Author Pubkey",authorPubkey);
     let fetchedFirstDegreeEvents: NostrEvent[] = [];
     try {
       fetchedFirstDegreeEvents = (

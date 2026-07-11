@@ -102,7 +102,10 @@ const renderDisplayProducts = ({
           >
             <FollowsContext.Provider
               value={{
-                followList: [],
+                directFollowList: [],
+                  followList: [],
+                  addFollow: async () => false,
+                  removeFollow: async () => false,
                 firstDegreeFollowsLength: 0,
                 isLoading: false,
               }}
@@ -162,7 +165,10 @@ describe("DisplayProducts search filtering", () => {
             <FollowsContext.Provider
               value={{
                 directFollowList: [],
-                followList: [],
+                directFollowList: [],
+                  followList: [],
+                  addFollow: async () => false,
+                  removeFollow: async () => false,
                 firstDegreeFollowsLength: 0,
                 isLoading: false,
                 addFollow: jest.fn(),
@@ -254,7 +260,10 @@ describe("DisplayProducts search filtering", () => {
             >
               <FollowsContext.Provider
                 value={{
+                  directFollowList: [],
                   followList: [],
+                  addFollow: async () => false,
+                  removeFollow: async () => false,
                   firstDegreeFollowsLength: 0,
                   isLoading: false,
                 }}
@@ -371,7 +380,10 @@ describe("DisplayProducts search filtering", () => {
               >
                 <FollowsContext.Provider
                   value={{
-                    followList: [],
+                    directFollowList: [],
+                  followList: [],
+                  addFollow: async () => false,
+                  removeFollow: async () => false,
                     firstDegreeFollowsLength: 0,
                     isLoading: false,
                   }}
@@ -594,7 +606,10 @@ describe("DisplayProducts search filtering", () => {
               >
                 <FollowsContext.Provider
                   value={{
-                    followList: [],
+                    directFollowList: [],
+                  followList: [],
+                  addFollow: async () => false,
+                  removeFollow: async () => false,
                     firstDegreeFollowsLength: 0,
                     isLoading: false,
                   }}

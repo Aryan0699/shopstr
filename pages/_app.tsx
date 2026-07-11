@@ -369,6 +369,7 @@ function Shopstr({ props }: { props: AppProps }) {
             : prev.firstDegreeFollowsLength + 1,
         };
       });
+      followsMutationVersionRef.current++;
 
       return true;
     },
@@ -396,6 +397,7 @@ function Shopstr({ props }: { props: AppProps }) {
             : prev.firstDegreeFollowsLength,
         };
       });
+      followsMutationVersionRef.current++;
 
       return true;
     },
@@ -451,6 +453,7 @@ function Shopstr({ props }: { props: AppProps }) {
   const hydratedMarketplaceProductIdsRef = useRef<Set<string>>(new Set());
   const pendingMarketplaceProductIdsRef = useRef<Set<string>>(new Set());
   const didCompleteInitialMarketplaceHydrationRef = useRef(false);
+  const followsMutationVersionRef = useRef(0);
 
   const mergeReportsContext = (nextReports: NostrEvent[]) => {
     if (nextReports.length === 0) return;
@@ -583,21 +586,6 @@ function Shopstr({ props }: { props: AppProps }) {
     setIsChatLoading(isLoading);
   };
 
-  const editFollowsContext = (
-    directFollowList: string[],
-    followList: string[],
-    firstDegreeFollowsLength: number,
-    isLoading: boolean
-  ) => {
-    setFollowsContext((prev) => ({
-      ...prev,
-      directFollowList,
-      followList,
-      firstDegreeFollowsLength,
-      isLoading,
-    }));
-  };
-
   const editCommunityContext = (
     communities: Map<string, Community>,
     isLoading: boolean
@@ -660,11 +648,14 @@ function Shopstr({ props }: { props: AppProps }) {
 
   /** FETCH initial FOLLOWS, RELAYS, PRODUCTS, and PROFILES **/
   useEffect(() => {
+
+    console.warn("[Shopstr] useEffect: Initialization started");
     const abortController = new AbortController();
 
     async function fetchData() {
       const runId = ++initializationRunRef.current;
       const isCurrentRun = () => runId === initializationRunRef.current;
+      const capturedFollowsMutationVersion = followsMutationVersionRef.current;
       type EditorFn = (...args: any[]) => void;
 
       const guard = <TFn extends EditorFn>(fn: TFn) => {
@@ -704,7 +695,34 @@ function Shopstr({ props }: { props: AppProps }) {
         guardedEditShopContext: editShopContext,
         guardedEditProfileContext: editProfileContext,
         guardedEditChatContext: editChatContext,
-        guardedEditFollowsContext: editFollowsContext,
+        guardedEditFollowsContext: (
+          directFollowList: string[],
+          followList: string[],
+          firstDegreeFollowsLength: number,
+          isLoading: boolean
+        ) => {
+          const versionAtFetchStart = capturedFollowsMutationVersion;
+          setFollowsContext((prev) => {
+            const userMutatedSinceFetchStarted =
+              followsMutationVersionRef.current > versionAtFetchStart;
+            if (userMutatedSinceFetchStarted) {
+              // User followed/unfollowed while fetch was in-flight.
+              // Preserve their directFollowList but still update WoT + isLoading.
+              return {
+                ...prev,
+                followList,
+                isLoading,
+              };
+            }
+            return {
+              ...prev,
+              directFollowList,
+              followList,
+              firstDegreeFollowsLength,
+              isLoading,
+            };
+          });
+        },
         guardedEditRelaysContext: editRelaysContext,
         guardedEditBlossomContext: editBlossomContext,
         guardedEditCashuWalletContext: editCashuWalletContext,

@@ -91,6 +91,7 @@ const renderDisplayProducts = ({
   reportEvents = [],
   followList = [],
   firstDegreeFollowsLength = 0,
+  wotFilter = false,
   addNewlyCreatedProductEvent = jest.fn(),
   removeDeletedProductEvent = jest.fn(),
 }: {
@@ -102,6 +103,7 @@ const renderDisplayProducts = ({
   reportEvents?: NostrEvent[];
   followList?: string[];
   firstDegreeFollowsLength?: number;
+  wotFilter?: boolean;
   addNewlyCreatedProductEvent?: jest.Mock;
   removeDeletedProductEvent?: jest.Mock;
 }) =>
@@ -157,6 +159,7 @@ const renderDisplayProducts = ({
                     selectedCategories={new Set()}
                     selectedLocation=""
                     selectedSearch={selectedSearch}
+                    wotFilter={wotFilter}
                   />
                 </ProductContext.Provider>
               </ReportsContext.Provider>
@@ -369,6 +372,108 @@ describe("DisplayProducts search filtering", () => {
         "data-report-level",
         "reported_by_you"
       );
+    });
+  });
+
+  it("removes trust-filtered listings when the seller leaves the follow list", async () => {
+    const followedSeller = "a".repeat(64);
+    const productEvent = {
+      id: "trusted-product-1",
+      pubkey: followedSeller,
+      created_at: 10,
+      kind: 30402,
+      tags: [
+        ["d", "trusted-coffee"],
+        ["title", "Trusted Coffee"],
+        ["price", "12", "USD"],
+        ["image", "https://example.com/trusted-coffee.png"],
+      ],
+      content: "Fresh trusted coffee",
+      sig: "sig-trusted-product",
+    } as NostrEvent;
+    let setFollowList: Dispatch<SetStateAction<string[]>> | undefined;
+
+    function TrustFilteredDisplayProducts() {
+      const [followList, updateFollowList] = useState([followedSeller]);
+      setFollowList = updateFollowList;
+
+      return (
+        <SignerContext.Provider
+          value={{ pubkey: "viewer-pubkey", isLoggedIn: true }}
+        >
+          <NostrContext.Provider value={{ nostr: {} as NostrManager }}>
+            <RelaysContext.Provider
+              value={{
+                relayList: [],
+                readRelayList: [],
+                writeRelayList: [],
+                isLoading: false,
+              }}
+            >
+              <ProfileMapContext.Provider
+                value={{
+                  profileData: new Map(),
+                  isLoading: false,
+                  updateProfileData: jest.fn(),
+                }}
+              >
+                <FollowsContext.Provider
+                  value={{
+                    directFollowList: followList,
+                    followList,
+                    firstDegreeFollowsLength: followList.length,
+                    isLoading: false,
+                    addFollow: async () => ({ ok: false, reason: "unknown" }),
+                    removeFollow: async () => ({
+                      ok: false,
+                      reason: "unknown",
+                    }),
+                  }}
+                >
+                  <ReportsContext.Provider
+                    value={{
+                      isLoading: false,
+                      reportEvents: [],
+                      addReportEvent: jest.fn(),
+                    }}
+                  >
+                    <ProductContext.Provider
+                      value={{
+                        productEvents: [productEvent],
+                        isLoading: false,
+                        addNewlyCreatedProductEvent: jest.fn(),
+                        removeDeletedProductEvent: jest.fn(),
+                      }}
+                    >
+                      <DisplayProducts
+                        selectedCategories={new Set()}
+                        selectedLocation=""
+                        selectedSearch=""
+                        wotFilter
+                      />
+                    </ProductContext.Provider>
+                  </ReportsContext.Provider>
+                </FollowsContext.Provider>
+              </ProfileMapContext.Provider>
+            </RelaysContext.Provider>
+          </NostrContext.Provider>
+        </SignerContext.Provider>
+      );
+    }
+
+    render(<TrustFilteredDisplayProducts />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Trusted Coffee")).toBeInTheDocument();
+    });
+
+    act(() => {
+      setFollowList?.([]);
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Trusted Coffee")).not.toBeInTheDocument();
+      expect(screen.getByText("No products found...")).toBeInTheDocument();
     });
   });
 

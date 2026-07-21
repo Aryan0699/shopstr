@@ -54,6 +54,7 @@ import {
   decryptNpub,
   deleteEvent,
   finalizeAndSendNostrEvent,
+  followUser,
   generateKeys,
   getDefaultBlossomServer,
   getDefaultMint,
@@ -78,6 +79,7 @@ import {
   saveNWCString,
   sendGiftWrappedMessageEvent,
   setLocalStorageDataOnSignIn,
+  unfollowUser,
   validateNPubKey,
   validateNSecKey,
   verifyNip05Identifier,
@@ -2593,6 +2595,255 @@ describe("finalizeAndSendNostrEvent", () => {
 
     consoleWarnSpy.mockRestore();
     consoleErrorSpy.mockRestore();
+  });
+});
+
+describe("follow and unfollow contact-list mutations", () => {
+  const relay = "wss://relay.example";
+  const userPubkey =
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const targetPubkey =
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+  const otherPubkey =
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+
+  const makeContactList = (overrides: Record<string, any> = {}) => ({
+    id: "contact-list-id",
+    pubkey: userPubkey,
+    created_at: 100,
+    kind: 3,
+    tags: [],
+    content: "",
+    sig: "sig",
+    ...overrides,
+  });
+
+  const makeSigner = (pubkey = userPubkey) => ({
+    getPubKey: jest.fn().mockResolvedValue(pubkey),
+    sign: jest.fn(async (eventTemplate: any) => ({
+      ...eventTemplate,
+      id: "signed-contact-list",
+      pubkey,
+      sig: "signed-sig",
+    })),
+  });
+
+  const makeNostr = (events: any[] = []) => ({
+    fetch: jest.fn().mockResolvedValue(events),
+    publish: jest.fn().mockResolvedValue(undefined),
+  });
+
+  beforeEach(() => {
+    localStorage.clear();
+    localStorage.setItem("relays", JSON.stringify([relay]));
+    localStorage.setItem("readRelays", JSON.stringify([]));
+    localStorage.setItem("writeRelays", JSON.stringify([]));
+    jest.clearAllMocks();
+    jest.spyOn(Date, "now").mockReturnValue(200_000);
+    (newPromiseWithTimeout as jest.Mock).mockImplementation(
+      async (fn: any) =>
+        new Promise((resolve, reject) =>
+          fn(resolve, reject, new AbortController().signal)
+        )
+    );
+    (global.fetch as jest.Mock | undefined)?.mockRestore?.();
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ contactList: null }),
+    }) as typeof global.fetch;
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("signs a follow event from the verified latest cached contact list", async () => {
+    const mutationUserPubkey =
+      "1111111111111111111111111111111111111111111111111111111111111111";
+    const signer = makeSigner(mutationUserPubkey);
+    const latestEvent = makeContactList({
+      pubkey: mutationUserPubkey,
+      tags: [["p", otherPubkey]],
+      created_at: "199",
+    });
+    const nostr = makeNostr([]);
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ contactList: latestEvent }),
+    });
+
+    const result = await followUser(nostr as any, signer as any, targetPubkey);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(result).toMatchObject({ ok: true, alreadyApplied: false });
+    expect(signer.sign).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 3,
+        created_at: 200,
+        content: "",
+        tags: [
+          ["p", otherPubkey],
+          ["p", targetPubkey],
+        ],
+      })
+    );
+    expect(cacheEventToDatabase).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "signed-contact-list", kind: 3 })
+    );
+    expect(nostr.publish).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "signed-contact-list" }),
+      expect.arrayContaining([relay])
+    );
+  });
+
+  it("does not sign when following an already-present pubkey", async () => {
+    const mutationUserPubkey =
+      "2222222222222222222222222222222222222222222222222222222222222222";
+    const signer = makeSigner(mutationUserPubkey);
+    const latestEvent = makeContactList({
+      pubkey: mutationUserPubkey,
+      tags: [["p", targetPubkey]],
+    });
+    const nostr = makeNostr([]);
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ contactList: latestEvent }),
+    });
+
+    const result = await followUser(nostr as any, signer as any, targetPubkey);
+
+    expect(result).toEqual({
+      ok: true,
+      event: latestEvent,
+      alreadyApplied: true,
+    });
+    expect(signer.sign).not.toHaveBeenCalled();
+    expect(cacheEventToDatabase).not.toHaveBeenCalled();
+    expect(nostr.publish).not.toHaveBeenCalled();
+  });
+
+  it("signs an unfollow event that removes only the target p tag", async () => {
+    const mutationUserPubkey =
+      "3333333333333333333333333333333333333333333333333333333333333333";
+    const signer = makeSigner(mutationUserPubkey);
+    const latestEvent = makeContactList({
+      pubkey: mutationUserPubkey,
+      tags: [
+        ["p", targetPubkey],
+        ["p", otherPubkey],
+        ["relay", relay],
+      ],
+    });
+    const nostr = makeNostr([]);
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ contactList: latestEvent }),
+    });
+
+    const result = await unfollowUser(
+      nostr as any,
+      signer as any,
+      targetPubkey
+    );
+
+    expect(result).toMatchObject({ ok: true, alreadyApplied: false });
+    expect(signer.sign).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 3,
+        tags: [
+          ["p", otherPubkey],
+          ["relay", relay],
+        ],
+      })
+    );
+  });
+
+  it("refuses to mutate when the contact list cannot be verified", async () => {
+    const mutationUserPubkey =
+      "4444444444444444444444444444444444444444444444444444444444444444";
+    const signer = makeSigner(mutationUserPubkey);
+    const nostr = {
+      fetch: jest.fn().mockRejectedValue(new Error("relay timeout")),
+      publish: jest.fn(),
+    };
+    (global.fetch as jest.Mock).mockRejectedValue(new Error("db timeout"));
+
+    const result = await followUser(nostr as any, signer as any, targetPubkey);
+
+    expect(result).toEqual({
+      ok: false,
+      reason: "unverified-contact-list",
+    });
+    expect(signer.sign).not.toHaveBeenCalled();
+    expect(cacheEventToDatabase).not.toHaveBeenCalled();
+    expect(nostr.publish).not.toHaveBeenCalled();
+  });
+
+  it("uses replaceable-event id tie-breaker between local and external contact lists", async () => {
+    const mutationUserPubkey =
+      "5555555555555555555555555555555555555555555555555555555555555555";
+    const signer = makeSigner(mutationUserPubkey);
+    const nostr = makeNostr([]);
+    const externalOnlyPubkey =
+      "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+    const nextTargetPubkey =
+      "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+    let signedCount = 0;
+    signer.sign.mockImplementation(async (eventTemplate: any) => {
+      signedCount += 1;
+      return {
+        ...eventTemplate,
+        id: signedCount === 1 ? "z".repeat(64) : "signed-after-tie-break",
+        pubkey: mutationUserPubkey,
+        sig: "signed-sig",
+      };
+    });
+
+    await followUser(nostr as any, signer as any, targetPubkey);
+
+    const preferredExternalEvent = makeContactList({
+      pubkey: mutationUserPubkey,
+      id: "a".repeat(64),
+      created_at: 200,
+      tags: [["p", externalOnlyPubkey]],
+    });
+    nostr.fetch.mockResolvedValue([preferredExternalEvent]);
+
+    const result = await followUser(
+      nostr as any,
+      signer as any,
+      nextTargetPubkey
+    );
+
+    expect(result).toMatchObject({ ok: true, alreadyApplied: false });
+    expect(signer.sign).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        created_at: 201,
+        tags: [
+          ["p", externalOnlyPubkey],
+          ["p", nextTargetPubkey],
+        ],
+      })
+    );
+  });
+
+  it("rejects invalid, self-follow, and already-empty unfollow requests without signing", async () => {
+    const mutationUserPubkey =
+      "6666666666666666666666666666666666666666666666666666666666666666";
+    const signer = makeSigner(mutationUserPubkey);
+    const nostr = makeNostr([]);
+
+    await expect(
+      followUser(nostr as any, signer as any, "not-a-pubkey")
+    ).resolves.toEqual({ ok: false, reason: "invalid-pubkey" });
+    await expect(
+      followUser(nostr as any, signer as any, mutationUserPubkey)
+    ).resolves.toEqual({ ok: false, reason: "self-follow" });
+    await expect(
+      unfollowUser(nostr as any, signer as any, targetPubkey)
+    ).resolves.toEqual({ ok: false, reason: "unknown" });
+    expect(signer.sign).not.toHaveBeenCalled();
   });
 });
 

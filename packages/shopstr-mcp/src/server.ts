@@ -26,6 +26,10 @@ export function createMcpServer(
   const cache =
     dependencies.cache ??
     new MemoryCache(config.profileCacheTtlMs, config.cacheMaxEntries);
+  const categoryCache = new MemoryCache(
+    config.categoryCacheTtlMs,
+    config.cacheMaxEntries
+  );
   const server = new McpServer({
     name: "shopstr-mcp",
     version: config.version,
@@ -36,6 +40,9 @@ export function createMcpServer(
     relays: config.relays,
     timeoutMs: config.defaultToolTimeoutMs,
     cache,
+    categoryCache,
+    maxConcurrentRequests: config.maxConcurrentRequests,
+    enableNip05Verification: config.enableNip05Verification,
   });
   registerPlaceholderCapabilityHandlers(server);
   attachNostrCloseHandler(server, nostr);

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { createSuccessResponse, type ToolTextResponse } from "../errors.js";
+import { isNip05Claim, verifyNip05Claim } from "../nip05.js";
 import { companyDetailsInputSchema } from "../validation.js";
 import {
   buildToolMeta,
@@ -117,6 +118,15 @@ export async function handleGetCompanyDetails(
       ...(includeReviews ? reviews.cache : {}),
     },
   };
+  const nip05Verification =
+    context.enableNip05Verification &&
+    profiles.userProfile?.nip05 &&
+    isNip05Claim(profiles.userProfile.nip05)
+      ? await verifyNip05Claim(
+          profiles.userProfile.nip05,
+          profiles.userProfile.pubkey
+        )
+      : undefined;
 
   return createSuccessResponse(
     {
@@ -145,6 +155,7 @@ export async function handleGetCompanyDetails(
       ...(includeProducts && {
         paymentInfo: buildPaymentInfo(products.products),
       }),
+      ...(nip05Verification && { nip05Verification }),
     },
     meta,
     resultCount

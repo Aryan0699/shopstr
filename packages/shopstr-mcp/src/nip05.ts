@@ -13,6 +13,12 @@ export type Nip05Verification = {
 };
 
 type FetchLike = typeof fetch;
+type ResolveHostname = (hostname: string) => Promise<string[]>;
+
+type Nip05VerifyOptions = {
+  fetchImpl?: FetchLike;
+  resolveHostname?: ResolveHostname;
+};
 
 export function isNip05Claim(value: string): boolean {
   const [name, domain, extra] = value.trim().split("@");
@@ -22,10 +28,16 @@ export function isNip05Claim(value: string): boolean {
 export async function verifyNip05Claim(
   claimed: string,
   pubkey: string,
-  fetchImpl: FetchLike = fetch
+  options: Nip05VerifyOptions | FetchLike = {}
 ): Promise<Nip05Verification> {
   const checkedAt = new Date().toISOString();
   const normalizedClaim = claimed.trim();
+  const fetchImpl =
+    typeof options === "function" ? options : (options.fetchImpl ?? fetch);
+  const resolveHostname =
+    typeof options === "function"
+      ? defaultResolveHostname
+      : (options.resolveHostname ?? defaultResolveHostname);
 
   try {
     if (!isNip05Claim(normalizedClaim)) {
@@ -41,7 +53,7 @@ export async function verifyNip05Claim(
     url.hostname = domain;
     url.searchParams.set("name", name);
 
-    await assertPublicHostname(domain);
+    await assertPublicHostname(domain, resolveHostname);
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), NIP05_TIMEOUT_MS);
@@ -138,20 +150,26 @@ function concatChunks(
   return combined;
 }
 
-async function assertPublicHostname(hostname: string): Promise<void> {
+async function assertPublicHostname(
+  hostname: string,
+  resolveHostname: ResolveHostname
+): Promise<void> {
   const directIpVersion = isIP(hostname);
   if (directIpVersion !== 0) {
     assertPublicIp(hostname);
     return;
   }
 
-  const addresses = await lookup(hostname, { all: true, verbatim: true });
+  const addresses = await resolveHostname(hostname);
   if (addresses.length === 0) {
     throw new Error("NIP-05 hostname did not resolve.");
   }
-  for (const address of addresses) {
-    assertPublicIp(address.address);
-  }
+  addresses.forEach(assertPublicIp);
+}
+
+async function defaultResolveHostname(hostname: string): Promise<string[]> {
+  const addresses = await lookup(hostname, { all: true, verbatim: true });
+  return addresses.map((address) => address.address);
 }
 
 function assertPublicIp(address: string): void {

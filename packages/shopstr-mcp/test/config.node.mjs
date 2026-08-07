@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  DEFAULT_CATEGORY_CACHE_TTL_MS,
+  DEFAULT_MAX_CONCURRENT_REQUESTS,
   DEFAULT_RELAYS,
   DEFAULT_TOOL_TIMEOUT_MS,
   loadConfig,
+  parseBooleanFlag,
   parseLogLevel,
   parsePositiveInteger,
   parseRelayList,
@@ -38,6 +41,10 @@ test("parses log levels and positive integers with safe fallbacks", () => {
   assert.equal(parsePositiveInteger("2500", DEFAULT_TOOL_TIMEOUT_MS), 2500);
   assert.equal(parsePositiveInteger("0", DEFAULT_TOOL_TIMEOUT_MS), 10000);
   assert.equal(parsePositiveInteger("abc", DEFAULT_TOOL_TIMEOUT_MS), 10000);
+  assert.equal(parseBooleanFlag("true"), true);
+  assert.equal(parseBooleanFlag("1"), true);
+  assert.equal(parseBooleanFlag("TRUE"), false);
+  assert.equal(parseBooleanFlag(undefined), false);
 });
 
 test("loads config from environment overrides", () => {
@@ -56,14 +63,26 @@ test("loads config from environment overrides", () => {
   assert.equal(config.relayConnectTimeoutMs, 2500);
   assert.equal(config.resourceCacheTtlMs, 3000);
   assert.equal(config.profileCacheTtlMs, 3000);
+  assert.equal(config.categoryCacheTtlMs, DEFAULT_CATEGORY_CACHE_TTL_MS);
+  assert.equal(config.cacheMaxEntries, 5000);
+  assert.equal(config.maxConcurrentRequests, DEFAULT_MAX_CONCURRENT_REQUESTS);
+  assert.equal(config.enableNip05Verification, false);
 });
 
 test("loads dedicated cache TTL when provided", () => {
   const config = loadConfig({
     SHOPSTR_MCP_RESOURCE_CACHE_TTL_MS: "3000",
     SHOPSTR_MCP_PROFILE_CACHE_TTL_MS: "4500",
+    SHOPSTR_MCP_CATEGORY_CACHE_TTL_MS: "86400000",
+    SHOPSTR_MCP_CACHE_MAX_ENTRIES: "42",
+    SHOPSTR_MCP_MAX_CONCURRENT_REQUESTS: "3",
+    SHOPSTR_MCP_ENABLE_NIP05_VERIFICATION: "true",
   });
 
   assert.equal(config.resourceCacheTtlMs, 3000);
   assert.equal(config.profileCacheTtlMs, 4500);
+  assert.equal(config.categoryCacheTtlMs, 86_400_000);
+  assert.equal(config.cacheMaxEntries, 42);
+  assert.equal(config.maxConcurrentRequests, 3);
+  assert.equal(config.enableNip05Verification, true);
 });

@@ -294,7 +294,10 @@ export default function CartInvoiceCard({
   const sellerFreeShippingStatus = useMemo(
     () =>
       computeSellerFreeShippingStatus({
-        products,
+        products: products.map((product) => ({
+          ...product,
+          price: product.price ?? 0,
+        })),
         quantities,
         appliedDiscounts,
         getShopProfileContent: (pubkey) => shopProfiles?.get(pubkey)?.content,
@@ -3011,7 +3014,8 @@ export default function CartInvoiceCard({
                             ? product.volumePrice
                             : product.weightPrice !== undefined
                               ? product.weightPrice
-                              : product.price) * (quantities[product.id] || 1);
+                              : (product.price ?? 0)) *
+                        (quantities[product.id] || 1);
                       const discountedPrice =
                         discount > 0
                           ? basePrice * (1 - discount / 100)
@@ -3243,7 +3247,7 @@ export default function CartInvoiceCard({
                           ? product.volumePrice
                           : product.weightPrice !== undefined
                             ? product.weightPrice
-                            : product.price;
+                            : (product.price ?? 0);
                     const basePrice =
                       originalPrice * (quantities[product.id] || 1);
                     const discountedPrice =

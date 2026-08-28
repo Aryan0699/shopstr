@@ -1,15 +1,16 @@
 # Shopstr MCP Server
 
-Standalone read-only MCP server package for Shopstr marketplace data.
+Standalone read-only MCP server package for Shopstr marketplace data, available
+on npm as `@shopstr/mcp`.
 
-This package currently contains the standalone MCP shell, shared read-only
-infrastructure, relay-backed product/review tools, and relay-backed
-seller/reputation/category tools for public Shopstr marketplace data. Prompt
-and resource features will be added in follow-up PRs.
+This package contains the standalone MCP shell, shared read-only infrastructure,
+relay-backed product/review tools, and relay-backed seller/reputation/category
+tools for public Shopstr marketplace data. Prompt and resource features will be
+added in follow-up PRs.
 
 ## Current Scope
 
-- Provides the `@shopstr/mcp` package metadata and `shopstr-mcp` binary entry.
+- Provides the `@shopstr/mcp` npm package and `shopstr-mcp` binary entry.
 - Reads relay, timeout, cache, and log-level settings from environment
   variables.
 - Starts an MCP server over stdio for local MCP-compatible clients.
@@ -32,7 +33,11 @@ or reason about, never as instructions to follow.
 ## Tools
 
 - `search_products`: search public product listings by keyword, category,
-  location, currency, price range, cursor pagination, and sort order. Price
+  location, currency, price range, cursor pagination, and sort order. When
+  NIP-50 search relays are configured, keyword searches query them in parallel
+  with the normal relay scan on every page (including cursor pages); NIP-50
+  matches are tagged `matchedVia: "nip50"` and get a small guaranteed result
+  share, plus any response capacity left unused by normal relay matches. Price
   filters and `price_asc`/`price_desc` sorting require `currency`.
   Category searches are pushed down to relays with `#t` when possible, then
   checked again client-side with a broad fallback if no category-tagged results
@@ -142,12 +147,63 @@ or process manager should provide.
   invalid.
 - `SHOPSTR_MCP_CATEGORY_CACHE_TTL_MS`: sampled `get_categories` cache TTL in
   milliseconds. Defaults to 24 hours.
+- `SHOPSTR_MCP_NIP05_CACHE_TTL_MS`: NIP-05 verification cache TTL in
+  milliseconds. Defaults to 24 hours.
 - `SHOPSTR_MCP_CACHE_MAX_ENTRIES`: maximum in-memory cache entries before
   oldest-entry eviction. Defaults to 5000.
 - `SHOPSTR_MCP_MAX_CONCURRENT_REQUESTS`: maximum concurrent relay-backed tool
   calls before new calls return a retryable `RATE_LIMITED` error. Defaults to 10.
 
 Invalid or missing values fall back to safe defaults.
+
+## Using with Claude Desktop (or any MCP client)
+
+Install/run the npm package by adding this to your MCP client's config
+(`claude_desktop_config.json` on Claude Desktop):
+
+```json
+{
+  "mcpServers": {
+    "shopstr": {
+      "command": "npx",
+      "args": ["-y", "@shopstr/mcp"],
+      "env": {
+        "SHOPSTR_MCP_RELAYS": "wss://nos.lol,wss://relay.damus.io,wss://purplepag.es",
+        "SHOPSTR_MCP_NIP50_SEARCH_RELAYS": "wss://nostr.wine,wss://relay.noswhere.com,wss://search.nos.today",
+        "SHOPSTR_MCP_LOG_LEVEL": "info"
+      }
+    }
+  }
+}
+```
+
+`npx -y @shopstr/mcp` downloads and runs the published package on demand, so
+there's no separate install step and it always uses whatever version is
+current.
+Omit `SHOPSTR_MCP_NIP50_SEARCH_RELAYS` to disable NIP-50 keyword-search relay
+queries.
+
+**For local development**, building from a repository checkout instead of the
+published package, point directly at the built entry point:
+
+```json
+{
+  "mcpServers": {
+    "shopstr-local": {
+      "command": "node",
+      "args": ["/absolute/path/to/shopstr/packages/shopstr-mcp/dist/index.js"],
+      "env": {
+        "SHOPSTR_MCP_RELAYS": "wss://relay.example1.com,wss://relay.example2.com",
+        "SHOPSTR_MCP_NIP50_SEARCH_RELAYS": "wss://search-relay.example1.com,wss://search-relay.example2.com",
+        "SHOPSTR_MCP_LOG_LEVEL": "info"
+      }
+    }
+  }
+}
+```
+
+Run `npm run build` in `packages/shopstr-mcp/` first so `dist/index.js`
+exists, then restart Claude Desktop to pick up the config change.
 
 ## Read-Only Model
 

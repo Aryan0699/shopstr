@@ -16,7 +16,7 @@
     "access": "public"
   },
   "bin": {
-    "shopstr-mcp": "./dist/index.js"
+    "shopstr-mcp": "dist/index.js"
   },
   "exports": {
     ".": {

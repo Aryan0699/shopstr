@@ -3,9 +3,9 @@
 Standalone read-only MCP server package for Shopstr marketplace data.
 
 This package currently contains the standalone MCP shell, shared read-only
-infrastructure, relay-backed product/review tools, and relay-backed
-seller/reputation/category tools for public Shopstr marketplace data. Prompt
-and resource features will be added in follow-up PRs.
+infrastructure, relay-backed product/review tools, relay-backed
+seller/reputation/category tools, an observed-categories resource, and workflow
+prompts for public Shopstr marketplace data.
 
 ## Current Scope
 
@@ -17,8 +17,11 @@ and resource features will be added in follow-up PRs.
   `search_products`, `get_product_details`, `get_reviews`,
   `list_companies`, `get_company_details`, `get_seller_reputation`,
   and `get_categories`.
-- Registers disabled resource and prompt placeholders so `resources/list` and
-  `prompts/list` return valid empty lists before those features are added.
+- Registers the `shopstr://categories` resource for compact observed-category
+  discovery.
+- Registers prompt workflows:
+  `find_and_check_product`, `seller_due_diligence`, `compare_products`, and
+  `find_and_compare_products`.
 - Provides reusable infrastructure modules for upcoming tools:
   `nostr-manager`, `relay-fetch`, `parse-tags`, `dedup`, `validation`,
   `errors`, `timeout`, `audit-log`, and `cache`.
@@ -103,6 +106,27 @@ embedded `shipping`, and subscription tags as fallback data when present.
 Tool responses include relay degradation metadata in `_meta`, including queried
 relays, successful relays, failed relays, coverage, response time, hints, and
 truncation flags when response budgeting applies.
+
+## Resources
+
+- `shopstr://categories`: compact JSON view of categories currently observed by
+  this MCP instance. It delegates to the same sampled, cached implementation as
+  `get_categories`, so counts are sampled observations from recent public
+  products, not total network counts.
+
+## Prompts
+
+- `find_and_check_product`: find product candidates for a buyer need, then
+  check product details, seller profile, reputation, and reviews before
+  recommending.
+- `seller_due_diligence`: investigate one seller's public profile, NIP-05
+  status, listings, reputation, and reviews.
+- `compare_products`: compare specific product addresses the user already has.
+- `find_and_compare_products`: search for candidates first, then compare the
+  strongest options.
+
+Prompts return workflow instructions only. They do not fetch relay data or make
+recommendations inside the server.
 
 Seller/profile tools receive a process-local in-memory cache through the shared
 tool context. The cache stores parsed public profile/shop responses and raw

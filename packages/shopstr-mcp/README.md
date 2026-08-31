@@ -106,8 +106,10 @@ structured image objects, `productType`, `productFormat`, `visibility`
 embedded `shipping`, and subscription tags as fallback data when present.
 
 Tool responses include relay degradation metadata in `_meta`, including queried
-relays, successful relays, failed relays, coverage, response time, hints, and
-truncation flags when response budgeting applies.
+relays, successful relays, incomplete relays, failed relays, coverage, response
+time, hints, and truncation flags when response budgeting applies. A timed-out
+relay is listed in `relaysIncomplete`, does not count toward coverage, and may
+still contribute events received before its timeout.
 
 Seller/profile tools receive a process-local in-memory cache through the shared
 tool context. The cache stores parsed public profile/shop responses and raw
@@ -166,10 +168,9 @@ Install/run the npm package by adding this to your MCP client's config
   "mcpServers": {
     "shopstr": {
       "command": "npx",
-      "args": ["-y", "@shopstr/mcp"],
+      "args": ["-y", "@shopstr/mcp@0.1.0"],
       "env": {
         "SHOPSTR_MCP_RELAYS": "wss://nos.lol,wss://relay.damus.io,wss://purplepag.es",
-        "SHOPSTR_MCP_NIP50_SEARCH_RELAYS": "wss://nostr.wine,wss://relay.noswhere.com,wss://search.nos.today",
         "SHOPSTR_MCP_LOG_LEVEL": "info"
       }
     }
@@ -177,11 +178,13 @@ Install/run the npm package by adding this to your MCP client's config
 }
 ```
 
-`npx -y @shopstr/mcp` downloads and runs the published package on demand, so
-there's no separate install step and it always uses whatever version is
-current.
-Omit `SHOPSTR_MCP_NIP50_SEARCH_RELAYS` to disable NIP-50 keyword-search relay
-queries.
+`npx -y @shopstr/mcp@0.1.0` downloads and runs the pinned published package on
+demand, so there is no separate install step. Update the version deliberately
+when adopting a new release.
+
+NIP-50 keyword-search relays are disabled by default because queries are shared
+with those third parties. To opt in, add
+`SHOPSTR_MCP_NIP50_SEARCH_RELAYS` to `env` with a comma-separated relay list.
 
 **For local development**, building from a repository checkout instead of the
 published package, point directly at the built entry point:
@@ -194,7 +197,6 @@ published package, point directly at the built entry point:
       "args": ["/absolute/path/to/shopstr/packages/shopstr-mcp/dist/index.js"],
       "env": {
         "SHOPSTR_MCP_RELAYS": "wss://relay.example1.com,wss://relay.example2.com",
-        "SHOPSTR_MCP_NIP50_SEARCH_RELAYS": "wss://search-relay.example1.com,wss://search-relay.example2.com",
         "SHOPSTR_MCP_LOG_LEVEL": "info"
       }
     }

@@ -252,3 +252,95 @@ test("rate limits concurrent relay-backed tool calls", async () => {
     }
   }
 });
+
+test("rate limits and audits concurrent category resource reads", async () => {
+  const [clientTransport, serverTransport] =
+    InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "shopstr-mcp-test", version: "0.0.0" });
+  let releaseFetch;
+  const fetchGate = new Promise((resolve) => {
+    releaseFetch = resolve;
+  });
+  let fetchCount = 0;
+  let auditOutput = "";
+  const originalStderrWrite = process.stderr.write;
+  process.stderr.write = (chunk, ...args) => {
+    auditOutput += String(chunk);
+    const callback = args.find((arg) => typeof arg === "function");
+    callback?.();
+    return true;
+  };
+  const server = createMcpServer(
+    loadConfig({
+      SHOPSTR_MCP_RELAYS: "wss://relay.example.com",
+      SHOPSTR_MCP_MAX_CONCURRENT_REQUESTS: "1",
+    }),
+    {
+      nostr: {
+        async fetch() {
+          fetchCount += 1;
+          await fetchGate;
+          return [productEvent()];
+        },
+        async close() {},
+      },
+      logger: {
+        warn() {},
+      },
+    }
+  );
+
+  try {
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+
+    const firstRead = client.readResource({
+      uri: "shopstr://categories",
+    });
+    const secondRead = await client.readResource({
+      uri: "shopstr://categories",
+    });
+    releaseFetch();
+    const firstResult = await firstRead;
+    const firstBody = JSON.parse(firstResult.contents[0].text);
+    const secondBody = JSON.parse(secondRead.contents[0].text);
+
+    assert.equal(firstBody.count, 1);
+    assert.equal(firstBody.categories[0].name, "clothing");
+    assert.equal(secondBody.errorCode, "RATE_LIMITED");
+    assert.equal(fetchCount, 1);
+
+    const auditEntries = auditOutput
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .filter(
+        (entry) =>
+          entry.level === "audit" &&
+          entry.toolName === "resource:shopstr://categories"
+      );
+    assert.equal(auditEntries.length, 2);
+    assert.equal(
+      auditEntries.some(
+        (entry) => entry.success === false && entry.errorCode === "RATE_LIMITED"
+      ),
+      true
+    );
+  } finally {
+    process.stderr.write = originalStderrWrite;
+    releaseFetch?.();
+    await client.close();
+    await server.close();
+    if (typeof clientTransport.close === "function") {
+      await clientTransport.close();
+    } else if (typeof clientTransport.dispose === "function") {
+      await clientTransport.dispose();
+    }
+    if (typeof serverTransport.close === "function") {
+      await serverTransport.close();
+    } else if (typeof serverTransport.dispose === "function") {
+      await serverTransport.dispose();
+    }
+  }
+});

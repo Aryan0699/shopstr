@@ -5,6 +5,8 @@ import type { ShopstrMcpConfig } from "./config.js";
 import { createLogger, type Logger } from "./logger.js";
 import { NostrManager } from "./nostr-manager.js";
 import { MemoryCache } from "./cache.js";
+import { wrapWithAudit } from "./audit-log.js";
+import { InFlightRateLimiter, wrapWithRateLimit } from "./rate-limiter.js";
 import { registerCoreTools } from "./tools/index.js";
 import { handleGetCategories } from "./tools/get-categories.js";
 import type { CoreToolContext } from "./tools/utils/context.js";
@@ -41,6 +43,7 @@ export function createMcpServer(
     name: "shopstr-mcp",
     version: config.version,
   });
+  const rateLimiter = new InFlightRateLimiter(config.maxConcurrentRequests);
 
   const coreToolContext = {
     nostr,
@@ -53,8 +56,8 @@ export function createMcpServer(
     maxConcurrentRequests: config.maxConcurrentRequests,
   };
 
-  registerCoreTools(server, coreToolContext);
-  registerResourcesAndPrompts(server, coreToolContext);
+  registerCoreTools(server, coreToolContext, rateLimiter);
+  registerResourcesAndPrompts(server, coreToolContext, rateLimiter);
   attachNostrCloseHandler(server, nostr);
 
   return server;
@@ -65,8 +68,16 @@ const CONTENT_WARNING =
 
 function registerResourcesAndPrompts(
   server: McpServer,
-  context: CoreToolContext
+  context: CoreToolContext,
+  rateLimiter: InFlightRateLimiter
 ): void {
+  const readCategoriesResource = wrapWithAudit(
+    "resource:shopstr://categories",
+    wrapWithRateLimit(rateLimiter, (_args, _extra) =>
+      handleGetCategories({}, context)
+    )
+  );
+
   server.registerResource(
     "categories",
     "shopstr://categories",
@@ -76,7 +87,10 @@ function registerResourcesAndPrompts(
       mimeType: "application/json",
     },
     async (uri) => {
-      const result = await handleGetCategories({}, context);
+      const result = await readCategoriesResource(
+        { uri: uri.toString() },
+        undefined
+      );
       return {
         contents: [
           {
